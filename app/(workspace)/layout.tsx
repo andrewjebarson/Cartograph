@@ -10,7 +10,7 @@ export default async function WorkspaceLayout({
   const theme = parseTheme((await cookies()).get(THEME_COOKIE)?.value);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="flex h-full w-full flex-col overflow-hidden">
       <header className="flex h-9 shrink-0 items-center gap-3 border-b border-line bg-surface px-3">
         <span className="font-mono text-xs font-semibold tracking-tight">cartograph</span>
         <span className="text-line">/</span>
@@ -19,7 +19,7 @@ export default async function WorkspaceLayout({
           <ThemeControl initial={theme} />
         </div>
       </header>
-      <main className="min-h-0 flex-1">{children}</main>
+      <main className="min-h-0 flex-1 overflow-hidden">{children}</main>
     </div>
   );
 }

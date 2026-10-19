@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { listAnalyses } from "@/lib/db";
 import { seedSampleData, clearAllData } from "./actions";
 
@@ -27,6 +28,12 @@ export default async function DashboardPage() {
               </button>
             </form>
           )}
+          <Link
+            href="/preview"
+            className="flex h-7 items-center rounded border border-amber-500/40 bg-amber-500/10 px-2.5 font-mono text-[11px] font-medium text-amber-600 dark:text-amber-400 transition-colors hover:bg-amber-500/20"
+          >
+            🗺️ Open Map Preview
+          </Link>
           <form action={seedSampleData}>
             <button
               type="submit"
@@ -78,7 +85,12 @@ export default async function DashboardPage() {
                     className="transition-colors hover:bg-raised/50"
                   >
                     <td className="px-4 py-3 font-mono font-medium text-fg">
-                      {a.repo_owner}/{a.repo_name}
+                      <Link
+                        href="/preview"
+                        className="hover:text-amber-500 hover:underline"
+                      >
+                        {a.repo_owner}/{a.repo_name}
+                      </Link>
                     </td>
                     <td className="px-4 py-3">
                       <span className="inline-flex items-center rounded border border-line px-1.5 py-0.5 font-mono text-[10px] text-fg-muted">
