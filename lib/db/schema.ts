@@ -12,20 +12,31 @@ CREATE TABLE IF NOT EXISTS analyses (
   id TEXT PRIMARY KEY,
   project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   status TEXT NOT NULL CHECK(status IN ('queued', 'parsing', 'complete', 'failed')),
+  stage TEXT DEFAULT 'queued',
+  stage_message TEXT,
+  error_message TEXT,
+  failed_stage TEXT,
   commit_sha TEXT,
   framework TEXT,
   file_count INTEGER DEFAULT 0,
   edge_count INTEGER DEFAULT 0,
   route_count INTEGER DEFAULT 0,
-  created_at TEXT NOT NULL
+  coverage_rate REAL DEFAULT 100,
+  unresolved_count INTEGER DEFAULT 0,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS files (
   id TEXT PRIMARY KEY,
   analysis_id TEXT NOT NULL REFERENCES analyses(id) ON DELETE CASCADE,
   path TEXT NOT NULL,
+  extension TEXT,
   skip_reason TEXT,
   line_count INTEGER DEFAULT 0,
+  byte_size INTEGER DEFAULT 0,
+  content_hash TEXT,
+  package_or_namespace TEXT,
   fan_in INTEGER DEFAULT 0,
   fan_out INTEGER DEFAULT 0
 );
@@ -35,6 +46,7 @@ CREATE TABLE IF NOT EXISTS edges (
   analysis_id TEXT NOT NULL REFERENCES analyses(id) ON DELETE CASCADE,
   from_path TEXT NOT NULL,
   to_path TEXT NOT NULL,
+  specifier TEXT,
   kind TEXT NOT NULL DEFAULT 'import'
 );
 

@@ -1,4 +1,5 @@
-import { getDb } from "./index";
+import { getDb, storeAnalysisData } from "./index";
+import { SAMPLE_GRAPH_DATA } from "../sample-graph-data";
 
 export function seedDemoProjects(): void {
   const db = getDb();
@@ -6,55 +7,39 @@ export function seedDemoProjects(): void {
   const count = db.prepare("SELECT COUNT(*) as count FROM projects").get() as { count: number };
   if (count && count.count > 0) return;
 
-  // Insert sample Angular project
+  const now = new Date().toISOString();
+
+  // Insert sample Fullstack Ecommerce project
   db.prepare(`
     INSERT INTO projects (id, repo_owner, repo_name, created_at)
     VALUES (?, ?, ?, ?)
   `).run(
-    "proj_angular_demo",
-    "angular",
-    "angular-tour-of-heroes",
-    new Date(Date.now() - 3600000).toISOString()
+    "proj_ecommerce_demo",
+    "example-org",
+    "ecommerce-fullstack",
+    now,
   );
 
   db.prepare(`
-    INSERT INTO analyses (id, project_id, status, commit_sha, framework, file_count, edge_count, route_count, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO analyses (
+      id, project_id, status, stage, stage_message,
+      commit_sha, framework, file_count, edge_count, route_count,
+      coverage_rate, unresolved_count, created_at, updated_at
+    )
+    VALUES (?, ?, 'parsing', 'store', 'Storing graph data...', '49c38f9', 'Fullstack (Angular + Spring Boot)', 0, 0, 0, 100, 0, ?, ?)
   `).run(
-    "ana_angular_demo",
-    "proj_angular_demo",
-    "complete",
-    "7f8a9b1",
-    "Angular",
-    42,
-    88,
-    6,
-    new Date(Date.now() - 3600000).toISOString()
+    "ana_ecommerce_demo",
+    "proj_ecommerce_demo",
+    now,
+    now,
   );
 
-  // Insert sample Spring Boot project
-  db.prepare(`
-    INSERT INTO projects (id, repo_owner, repo_name, created_at)
-    VALUES (?, ?, ?, ?)
-  `).run(
-    "proj_spring_demo",
-    "spring-projects",
-    "spring-petclinic",
-    new Date().toISOString()
-  );
-
-  db.prepare(`
-    INSERT INTO analyses (id, project_id, status, commit_sha, framework, file_count, edge_count, route_count, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(
-    "ana_spring_demo",
-    "proj_spring_demo",
-    "complete",
-    "3c4d5e6",
-    "Spring Boot",
-    58,
-    114,
-    18,
-    new Date().toISOString()
+  // Store full sample graph data (179 files, edges, circular cycle)
+  storeAnalysisData(
+    "ana_ecommerce_demo",
+    SAMPLE_GRAPH_DATA,
+    "49c38f9",
+    "Fullstack (Angular + Spring Boot)",
   );
 }
+
