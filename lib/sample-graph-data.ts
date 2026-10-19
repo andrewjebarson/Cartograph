@@ -208,6 +208,14 @@ function generateSampleRepo(): ParseResult {
     }
   }
 
+  // Real circular dependency cycle for Phase 6 insight verification:
+  // OrderService.java -> PaymentService.java -> OrderService.java
+  addEdge(
+    "src/main/java/com/example/ecommerce/service/OrderService.java",
+    "src/main/java/com/example/ecommerce/service/PaymentService.java",
+    "PaymentService"
+  );
+
   // Connect Controllers -> Services, DTOs
   for (let i = 0; i < controllers.length; i++) {
     const cPath = `src/main/java/com/example/ecommerce/controller/${controllers[i]}.java`;

@@ -11,6 +11,7 @@ import { MapCanvas } from "../../../components/map/map-canvas.tsx";
 export default function PreviewMapPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const [activeCategory, setActiveCategory] = useState<string | null>(null);
 
   const foldedGraph = useMemo(
     () => computeFoldedGraph(SAMPLE_GRAPH_DATA.files, SAMPLE_GRAPH_DATA.edges),
@@ -53,7 +54,11 @@ export default function PreviewMapPage() {
       {/* Main 3-Column Shell */}
       <div className="flex flex-1 min-h-0 w-full overflow-hidden">
         {/* Left Rail: File Categories */}
-        <LeftRail files={SAMPLE_GRAPH_DATA.files} />
+        <LeftRail
+          files={SAMPLE_GRAPH_DATA.files}
+          activeCategory={activeCategory}
+          onSelectCategory={setActiveCategory}
+        />
 
         {/* Middle Column: Interactive Map Canvas */}
         <main className="flex-1 h-full min-w-0 relative">
@@ -61,6 +66,7 @@ export default function PreviewMapPage() {
             parseResult={SAMPLE_GRAPH_DATA}
             selectedId={selectedId}
             hoveredId={hoveredId}
+            activeCategory={activeCategory}
             onSelect={setSelectedId}
             onHover={setHoveredId}
           />

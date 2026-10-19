@@ -3,6 +3,7 @@
 import React, { memo } from "react";
 import { Handle, Position, type NodeProps, type Node } from "@xyflow/react";
 import type { ParsedFile } from "../../lib/parser/types.ts";
+import { deriveCategory } from "../../lib/graph/folding.ts";
 
 export interface ExpandedPanelData extends Record<string, unknown> {
   id: string;
@@ -15,6 +16,7 @@ export interface ExpandedPanelData extends Record<string, unknown> {
   isDimmed?: boolean;
   selectedFile?: string | null;
   hoveredFile?: string | null;
+  activeCategory?: string | null;
   onToggleExpand: (id: string) => void;
   onSelectFile: (filePath: string) => void;
   onSelectFolder: (id: string) => void;
@@ -33,6 +35,10 @@ export const ExpandedPanelNode = memo(function ExpandedPanelNode({
   const isDimmed = Boolean(panelData.isDimmed);
   const visibleFiles = panelData.files.slice(0, MAX_VISIBLE_ROWS);
   const remainingCount = panelData.files.length - MAX_VISIBLE_ROWS;
+
+  const matchCount = panelData.activeCategory
+    ? panelData.files.filter((f) => deriveCategory(f.path) === panelData.activeCategory).length
+    : 0;
 
   return (
     <div
@@ -82,9 +88,15 @@ export const ExpandedPanelNode = memo(function ExpandedPanelNode({
         </div>
 
         <div className="flex items-center gap-1.5 shrink-0">
-          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300">
-            {panelData.fileCount} files
-          </span>
+          {panelData.activeCategory ? (
+            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-700 dark:text-amber-300 font-semibold border border-amber-500/30">
+              {matchCount} of {panelData.files.length} match
+            </span>
+          ) : (
+            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300">
+              {panelData.fileCount} files
+            </span>
+          )}
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -114,6 +126,9 @@ export const ExpandedPanelNode = memo(function ExpandedPanelNode({
           const fileName = file.path.split("/").pop() || file.path;
           const isFileSelected = panelData.selectedFile === file.path;
           const isFileHovered = panelData.hoveredFile === file.path;
+          const isCategoryMatch =
+            !panelData.activeCategory ||
+            deriveCategory(file.path) === panelData.activeCategory;
 
           return (
             <div
@@ -125,6 +140,8 @@ export const ExpandedPanelNode = memo(function ExpandedPanelNode({
               onMouseEnter={() => panelData.onHoverFile?.(file.path)}
               onMouseLeave={() => panelData.onHoverFile?.(null)}
               className={`relative flex items-center justify-between px-3 py-1.5 text-xs font-mono cursor-pointer transition-colors ${
+                !isCategoryMatch ? "opacity-30" : "opacity-100"
+              } ${
                 isFileSelected
                   ? "bg-amber-500/20 text-amber-900 dark:text-amber-200 font-medium ring-1 ring-amber-500"
                   : isFileHovered

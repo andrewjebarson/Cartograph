@@ -15,7 +15,7 @@ import {
 import "@xyflow/react/dist/style.css";
 
 import type { ParseResult } from "../../lib/parser/types.ts";
-import { computeFoldedGraph } from "../../lib/graph/folding.ts";
+import { computeFoldedGraph, deriveCategory } from "../../lib/graph/folding.ts";
 import { layoutGraph } from "../../lib/graph/layout.ts";
 import { FoldedNode } from "./folded-node.tsx";
 import { ExpandedPanelNode } from "./expanded-panel-node.tsx";
@@ -29,6 +29,7 @@ interface MapCanvasProps {
   parseResult: ParseResult;
   selectedId: string | null;
   hoveredId?: string | null;
+  activeCategory?: string | null;
   onSelect: (id: string | null) => void;
   onHover: (id: string | null) => void;
 }
@@ -37,6 +38,7 @@ function InnerMapCanvas({
   parseResult,
   selectedId,
   hoveredId = null,
+  activeCategory = null,
   onSelect,
   onHover,
 }: MapCanvasProps) {
@@ -134,7 +136,12 @@ function InnerMapCanvas({
     const hasSelection = Boolean(selectedId);
 
     return positionedNodes.map((n) => {
-      const isDimmed = hasSelection && !activeNodeIds.has(n.id);
+      const matchesCategory =
+        !activeCategory ||
+        n.files.some((f) => deriveCategory(f.path) === activeCategory);
+
+      const isDimmed =
+        (hasSelection && !activeNodeIds.has(n.id)) || !matchesCategory;
       const isSelected = selectedId === n.id;
       const isNodeHovered =
         Boolean(hoveredId) &&
@@ -159,6 +166,7 @@ function InnerMapCanvas({
             isDimmed,
             selectedFile: selectedId,
             hoveredFile: hoveredId,
+            activeCategory,
             onToggleExpand: handleToggleExpand,
             onSelectFile: (filePath: string) => onSelect(filePath),
             onSelectFolder: (id: string) => onSelect(id),
@@ -196,6 +204,7 @@ function InnerMapCanvas({
     selectedId,
     activeNodeIds,
     hoveredId,
+    activeCategory,
     fileToNodeMap,
     handleToggleExpand,
     onSelect,
@@ -217,7 +226,15 @@ function InnerMapCanvas({
           e.sourceFile === hoveredId ||
           e.targetFile === hoveredId);
 
-      const isDimmed = hasSelection && !isEdgeActive && !isEdgeHovered;
+      const isDimmed =
+        (hasSelection && !isEdgeActive && !isEdgeHovered) ||
+        (Boolean(activeCategory) &&
+          !positionedNodes
+            .find((n) => n.id === e.source)
+            ?.files.some((f) => deriveCategory(f.path) === activeCategory) &&
+          !positionedNodes
+            .find((n) => n.id === e.target)
+            ?.files.some((f) => deriveCategory(f.path) === activeCategory));
 
       return {
         id: e.id,
@@ -238,7 +255,15 @@ function InnerMapCanvas({
         },
       };
     });
-  }, [positionedEdges, expandedNodeIds, selectedId, activeEdgeIds, hoveredId]);
+  }, [
+    positionedEdges,
+    expandedNodeIds,
+    selectedId,
+    activeEdgeIds,
+    hoveredId,
+    activeCategory,
+    positionedNodes,
+  ]);
 
   return (
     <div
