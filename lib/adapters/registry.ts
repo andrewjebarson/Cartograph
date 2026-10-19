@@ -2,10 +2,12 @@ import type { ResolvedEdge } from "../parser/types.ts";
 import type { FrameworkAdapter, AdapterResult, TaxonomyItem } from "./types.ts";
 import { angularAdapter } from "./angular.ts";
 import { springBootAdapter } from "./spring-boot.ts";
+import { expressAdapter } from "./express.ts";
 
 export const REGISTERED_ADAPTERS: FrameworkAdapter[] = [
   angularAdapter,
   springBootAdapter,
+  expressAdapter,
 ];
 
 export function detectAndAnalyze(

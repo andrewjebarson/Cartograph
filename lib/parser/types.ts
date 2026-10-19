@@ -10,6 +10,7 @@ export interface ParsedFile {
   fanOut: number;
   packageOrNamespace?: string; // e.g. "com.example.demo.service" for Java
   role?: string; // e.g. "controller", "service", "repository", "entity", "component", "module", "guard"
+  exports?: string[]; // Exported names (e.g. CommonJS module exports)
 }
 
 export interface ResolvedEdge {

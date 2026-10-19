@@ -11,6 +11,8 @@ import {
   type Node,
   type Edge,
   type NodeTypes,
+  type OnNodesChange,
+  type NodeChange,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 
@@ -43,8 +45,32 @@ function InnerMapCanvas({
   onHover,
 }: MapCanvasProps) {
   const [expandedNodeIds, setExpandedNodeIds] = useState<Set<string>>(new Set());
+  const [nodePositions, setNodePositions] = useState<Record<string, { x: number; y: number }>>({});
+  const [prevLayoutKey, setPrevLayoutKey] = useState("");
   const { fitView, getZoom } = useReactFlow();
   const prevExpandedCount = useRef(0);
+
+  // Reset positions during render whenever repo or folder expansion changes
+  const layoutKey = `${parseResult.rootPath}:${Array.from(expandedNodeIds).sort().join(",")}`;
+  if (prevLayoutKey !== layoutKey) {
+    setPrevLayoutKey(layoutKey);
+    setNodePositions({});
+  }
+
+  // Handle free node movement via dragging
+  const onNodesChange: OnNodesChange = useCallback((changes: NodeChange[]) => {
+    setNodePositions((prev) => {
+      let updated = false;
+      const next = { ...prev };
+      for (const change of changes) {
+        if (change.type === "position" && change.position) {
+          next[change.id] = change.position;
+          updated = true;
+        }
+      }
+      return updated ? next : prev;
+    });
+  }, []);
 
   // Toggle folder open/closed
   const handleToggleExpand = useCallback((nodeId: string) => {
@@ -161,11 +187,13 @@ function InnerMapCanvas({
         Boolean(hoveredId) &&
         (hoveredId === n.id || fileToNodeMap.get(hoveredId || "") === n.id);
 
+      const pos = nodePositions[n.id] ?? { x: n.x, y: n.y };
+
       if (n.isExpanded) {
         return {
           id: n.id,
           type: "expandedPanel",
-          position: { x: n.x, y: n.y },
+          position: pos,
           width: n.width,
           height: n.height,
           style: { width: n.width, height: n.height },
@@ -192,7 +220,7 @@ function InnerMapCanvas({
       return {
         id: n.id,
         type: "foldedNode",
-        position: { x: n.x, y: n.y },
+        position: pos,
         width: n.width,
         height: n.height,
         style: { width: n.width, height: n.height },
@@ -215,6 +243,7 @@ function InnerMapCanvas({
     });
   }, [
     positionedNodes,
+    nodePositions,
     selectedId,
     activeNodeIds,
     hoveredId,
@@ -297,6 +326,7 @@ function InnerMapCanvas({
         minZoom={0.2}
         maxZoom={2.5}
         nodesDraggable={true}
+        onNodesChange={onNodesChange}
         nodesConnectable={false}
         elementsSelectable={true}
         onPaneClick={() => {

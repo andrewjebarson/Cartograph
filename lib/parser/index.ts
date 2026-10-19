@@ -101,7 +101,7 @@ export function parseRepository(rootDir: string): ParseResult {
       file.extension === ".cjs"
     ) {
       // TypeScript or JavaScript
-      const { imports, error } = extractTsImports(
+      const { imports, exports, error } = extractTsImports(
         file.relativePath,
         file.content,
         tsProject,
@@ -140,6 +140,7 @@ export function parseRepository(rootDir: string): ParseResult {
         contentHash: file.contentHash,
         fanIn: 0,
         fanOut: 0,
+        exports: exports && exports.length > 0 ? exports : undefined,
       });
     } else {
       // Other supported repository assets/styles (e.g. .css, .scss, .html, .json)

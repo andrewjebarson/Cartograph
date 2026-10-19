@@ -52,6 +52,16 @@ export function LeftRail({
     );
   }, [framework, files]);
 
+  const isExpress = useMemo(() => {
+    if (framework && framework.toLowerCase().includes("express")) return true;
+    return files.some(
+      (f) =>
+        f.role === "middleware" ||
+        (f.role === "controller" && f.extension !== ".java") ||
+        (f.role === "route" && !f.path.includes("app-routing")),
+    );
+  }, [framework, files]);
+
   const categories: CategoryStat[] = useMemo(() => {
     if (isAngular) {
       // Dynamic taxonomy for Angular: Components, Services, Modules, Guards, Routes
@@ -115,6 +125,60 @@ export function LeftRail({
       ];
     }
 
+    if (isExpress) {
+      // Dynamic taxonomy for Express: Controllers, Routes, Middleware, Services, Models, Configs, Utils
+      let controllerCount = 0;
+      let routeCount = 0;
+      let middlewareCount = 0;
+      let serviceCount = 0;
+      let modelCount = 0;
+      let configCount = 0;
+      let utilCount = 0;
+
+      for (const f of files) {
+        if (f.role === "controller") controllerCount++;
+        else if (f.role === "route") routeCount++;
+        else if (f.role === "middleware") middlewareCount++;
+        else if (f.role === "service") serviceCount++;
+        else if (f.role === "model") modelCount++;
+        else if (f.role === "config") configCount++;
+        else if (f.role === "util") utilCount++;
+      }
+
+      const items: CategoryStat[] = [];
+      if (controllerCount > 0) {
+        items.push({ id: "controller", name: "Controllers", count: controllerCount, color: "#3b82f6" });
+      }
+      if (routeCount > 0) {
+        items.push({ id: "route_files", name: "Routes", count: routeCount, color: "#f59e0b" });
+      }
+      if (middlewareCount > 0) {
+        items.push({ id: "middleware", name: "Middleware", count: middlewareCount, color: "#ec4899" });
+      }
+      if (serviceCount > 0) {
+        items.push({ id: "service", name: "Services", count: serviceCount, color: "#10b981" });
+      }
+      if (modelCount > 0) {
+        items.push({ id: "model", name: "Models", count: modelCount, color: "#8b5cf6" });
+      }
+      if (configCount > 0) {
+        items.push({ id: "config", name: "Configs", count: configCount, color: "#6366f1" });
+      }
+      if (utilCount > 0) {
+        items.push({ id: "util", name: "Utils", count: utilCount, color: "#14b8a6" });
+      }
+
+      items.push({
+        id: "route",
+        name: "Route Table",
+        count: routes.length,
+        color: "#71717a",
+        isRouteCategory: true,
+      });
+
+      return items;
+    }
+
     // Generic fallback taxonomy
     const counts = new Map<string, number>();
     for (const f of files) {
@@ -138,14 +202,14 @@ export function LeftRail({
     });
 
     return items;
-  }, [isAngular, isSpringBoot, files, routes]);
+  }, [isAngular, isSpringBoot, isExpress, files, routes]);
 
   return (
     <aside className="w-56 shrink-0 border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 flex flex-col h-full select-none">
       <div className="p-3 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
         <div>
           <h2 className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
-            {isAngular ? "Angular Roles" : isSpringBoot ? "Spring Boot Roles" : "Categories"}
+            {isAngular ? "Angular Roles" : isSpringBoot ? "Spring Boot Roles" : isExpress ? "Express Roles" : "Categories"}
           </h2>
           <p className="text-[10px] text-zinc-400 mt-0.5 font-mono">
             {files.length} files · {routes.length} routes

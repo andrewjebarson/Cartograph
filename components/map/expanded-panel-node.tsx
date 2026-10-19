@@ -76,8 +76,8 @@ export const ExpandedPanelNode = memo(function ExpandedPanelNode({
           e.stopPropagation();
           panelData.onToggleExpand(id);
         }}
-        title="Click to collapse"
-        className="flex items-center justify-between px-3 py-2 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950/50 rounded-t-lg cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800/60"
+        title="Click to collapse (Drag to move)"
+        className="flex items-center justify-between px-3 py-2 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950/50 rounded-t-lg cursor-grab active:cursor-grabbing hover:bg-zinc-100 dark:hover:bg-zinc-800/60"
       >
         <div className="flex items-center gap-2 min-w-0">
           <svg

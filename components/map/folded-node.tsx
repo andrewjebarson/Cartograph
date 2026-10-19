@@ -42,7 +42,7 @@ export const FoldedNode = memo(function FoldedNode({
       }}
       onMouseEnter={() => nodeData.onHover?.(id)}
       onMouseLeave={() => nodeData.onHover?.(null)}
-      className={`group relative rounded-md border text-xs shadow-sm transition-all duration-150 cursor-pointer select-none ${
+      className={`group relative rounded-md border text-xs shadow-sm transition-all duration-150 cursor-grab active:cursor-grabbing select-none ${
         isDimmed ? "opacity-25" : "opacity-100"
       } ${
         isSelected || isHovered
