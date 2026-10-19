@@ -10,7 +10,8 @@ export interface ExplanationTrace {
 }
 
 export interface ExplanationData {
-  text: string;
+  text?: string;
+  explanation?: string;
   targetPath: string;
   targetType: "file" | "folder";
   cached: boolean;
@@ -20,6 +21,7 @@ export interface ExplanationData {
   durationMs: number;
   trace: ExplanationTrace;
 }
+
 
 interface ExplanationPanelProps {
   selectedId: string | null;
@@ -81,11 +83,13 @@ export function ExplanationPanel({
   }, [selectedFile, currentExplanation]);
 
   const handleCopy = () => {
-    if (!currentExplanation) return;
-    navigator.clipboard?.writeText(currentExplanation.text);
+    const textToCopy = currentExplanation?.text || currentExplanation?.explanation || "";
+    if (!textToCopy) return;
+    navigator.clipboard?.writeText(textToCopy);
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   };
+
 
   // Helper to render markdown inline elements (bold, code, links)
   const renderInline = (text: string) => {
@@ -168,8 +172,10 @@ export function ExplanationPanel({
 
 
   // Render markdown paragraphs and lists
-  const renderMarkdown = (markdown: string) => {
-    const blocks = markdown.split(/\n\n+/);
+  const renderMarkdown = (markdown?: string | null) => {
+    if (!markdown) return null;
+    const blocks = String(markdown).split(/\n\n+/);
+
 
     return blocks.map((block, bIdx) => {
       const trimmed = block.trim();
@@ -368,8 +374,9 @@ export function ExplanationPanel({
 
           {/* Explanation Text */}
           <div className="space-y-2.5">
-            {renderMarkdown(currentExplanation.text)}
+            {renderMarkdown(currentExplanation.text || currentExplanation.explanation)}
           </div>
+
         </div>
       )}
 

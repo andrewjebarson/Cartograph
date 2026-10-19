@@ -90,6 +90,7 @@ export async function POST(request: Request) {
 
           return NextResponse.json({
             explanation: cached.explanation,
+            text: cached.explanation,
             targetPath,
             targetType: "file",
             cached: true,
@@ -142,6 +143,7 @@ export async function POST(request: Request) {
 
       return NextResponse.json({
         explanation: completion.text,
+        text: completion.text,
         targetPath,
         targetType: "file",
         cached: false,
@@ -188,6 +190,7 @@ export async function POST(request: Request) {
 
         return NextResponse.json({
           explanation: cached.explanation,
+          text: cached.explanation,
           targetPath,
           targetType: "folder",
           cached: true,
@@ -237,8 +240,10 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       explanation: completion.text,
+      text: completion.text,
       targetPath,
       targetType: "folder",
+
       cached: false,
       model: completion.model,
       provider: completion.provider,
