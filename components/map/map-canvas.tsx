@@ -145,6 +145,9 @@ function InnerMapCanvas({
           id: n.id,
           type: "expandedPanel",
           position: { x: n.x, y: n.y },
+          width: n.width,
+          height: n.height,
+          style: { width: n.width, height: n.height },
           data: {
             id: n.id,
             label: n.label,
@@ -168,6 +171,8 @@ function InnerMapCanvas({
         id: n.id,
         type: "foldedNode",
         position: { x: n.x, y: n.y },
+        width: n.width,
+        height: n.height,
         style: { width: n.width, height: n.height },
         data: {
           id: n.id,
@@ -241,6 +246,7 @@ function InnerMapCanvas({
       onClick={() => {
         onSelect(null);
         onHover(null);
+        setExpandedNodeIds(new Set());
       }}
     >
       <ReactFlow
@@ -257,6 +263,7 @@ function InnerMapCanvas({
         onPaneClick={() => {
           onSelect(null);
           onHover(null);
+          setExpandedNodeIds(new Set());
         }}
         onNodeMouseEnter={(_, node) => onHover(node.id)}
         onNodeMouseLeave={() => onHover(null)}
@@ -267,12 +274,19 @@ function InnerMapCanvas({
           showInteractive={false}
         />
         <MiniMap
-          nodeStrokeWidth={3}
+          nodeStrokeWidth={2}
+          nodeStrokeColor="#71717a"
           nodeColor={(node) => {
-            return node.type === "expandedPanel" ? "#f59e0b" : "#71717a";
+            return node.type === "expandedPanel" ? "#f59e0b" : "#3b82f6";
           }}
-          maskColor="rgba(0, 0, 0, 0.4)"
-          className="!border !border-zinc-300 dark:!border-zinc-800 !bg-white/80 dark:!bg-zinc-900/80 !rounded-md"
+          nodeBorderRadius={2}
+          maskColor="rgba(245, 158, 11, 0.15)"
+          maskStrokeColor="#f59e0b"
+          maskStrokeWidth={1}
+          bgColor="#18181b"
+          pannable
+          zoomable
+          className="!border !border-zinc-700 !bg-zinc-900/95 !rounded-md !shadow-xl"
         />
       </ReactFlow>
     </div>
