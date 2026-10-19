@@ -114,7 +114,13 @@ function InnerMapCanvas({
     if (fileFolder) {
       activeNodes.add(fileFolder);
       for (const e of positionedEdges) {
-        if (e.sourceFile === selectedId || e.targetFile === selectedId) {
+        const isConnected =
+          e.sourceFile === selectedId ||
+          e.targetFile === selectedId ||
+          (e.sourceFiles && e.sourceFiles.includes(selectedId)) ||
+          (e.targetFiles && e.targetFiles.includes(selectedId));
+
+        if (isConnected) {
           activeEdges.add(e.id);
           activeNodes.add(e.source);
           activeNodes.add(e.target);
@@ -305,17 +311,45 @@ function InnerMapCanvas({
         (e.source === hoveredId ||
           e.target === hoveredId ||
           e.sourceFile === hoveredId ||
-          e.targetFile === hoveredId);
+          e.targetFile === hoveredId ||
+          (e.sourceFiles && e.sourceFiles.includes(hoveredId || "")) ||
+          (e.targetFiles && e.targetFiles.includes(hoveredId || "")));
 
-      const isDimmed =
-        (hasSelection && !isEdgeActive && !isEdgeHovered) ||
-        (Boolean(activeCategory) &&
-          !positionedNodes
-            .find((n) => n.id === e.source)
-            ?.files.some((f) => deriveCategory(f.path) === activeCategory) &&
-          !positionedNodes
-            .find((n) => n.id === e.target)
-            ?.files.some((f) => deriveCategory(f.path) === activeCategory));
+      // Direction per docs/project-doc.md:
+      // Amber for outgoing (fan-out: what this file imports)
+      // Green for incoming (fan-in: what imports this file)
+      const isOutgoing = selectedId
+        ? e.source === selectedId ||
+          e.sourceFile === selectedId ||
+          (e.sourceFiles && e.sourceFiles.includes(selectedId))
+        : false;
+
+      const isIncoming = selectedId
+        ? e.target === selectedId ||
+          e.targetFile === selectedId ||
+          (e.targetFiles && e.targetFiles.includes(selectedId))
+        : false;
+
+      let strokeColor = "#71717a";
+      if (isEdgeHovered) {
+        strokeColor = "#38bdf8";
+      } else if (isIncoming) {
+        strokeColor = "#10b981"; // green for incoming
+      } else if (isOutgoing) {
+        strokeColor = "#f59e0b"; // amber for outgoing
+      } else if (isEdgeActive) {
+        strokeColor = "#f59e0b";
+      }
+
+      // Declutter: when any file/node is selected, unrelated edges fade out completely (0.02)
+      // Resting opacity when nothing selected is 0.25
+      const opacity = hasSelection
+        ? isEdgeActive || isEdgeHovered
+          ? 1
+          : 0.02
+        : 0.25;
+
+      const strokeWidth = isEdgeHovered ? 2.5 : isEdgeActive ? 2 : 1;
 
       return {
         id: e.id,
@@ -325,13 +359,9 @@ function InnerMapCanvas({
         targetHandle: isTgtExpanded ? e.targetFile : undefined,
         animated: isEdgeActive || isEdgeHovered,
         style: {
-          stroke: isEdgeHovered
-            ? "#f59e0b"
-            : isEdgeActive
-              ? "#f59e0b"
-              : "#a1a1aa",
-          strokeWidth: isEdgeHovered ? 2.5 : isEdgeActive ? 2 : 1,
-          opacity: isDimmed ? 0.15 : 0.85,
+          stroke: strokeColor,
+          strokeWidth,
+          opacity,
           transition: "opacity 150ms ease, stroke 150ms ease",
         },
       };
@@ -342,8 +372,6 @@ function InnerMapCanvas({
     selectedId,
     activeEdgeIds,
     hoveredId,
-    activeCategory,
-    positionedNodes,
   ]);
 
   return (

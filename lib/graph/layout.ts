@@ -14,6 +14,8 @@ export interface PositionedGraph {
     target: string;
     sourceFile: string;
     targetFile: string;
+    sourceFiles?: string[];
+    targetFiles?: string[];
     count: number;
   }[];
 }
@@ -29,6 +31,8 @@ export function layoutGraph(
     target: string;
     sourceFile: string;
     targetFile: string;
+    sourceFiles?: string[];
+    targetFiles?: string[];
     count: number;
   }[],
   rankdir: "TB" | "LR" = "TB",

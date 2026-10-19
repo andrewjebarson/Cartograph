@@ -268,6 +268,8 @@ export function computeFoldedGraph(
       target: string;
       sourceFile: string;
       targetFile: string;
+      sourceFiles: string[];
+      targetFiles: string[];
       count: number;
     }
   >();
@@ -287,6 +289,12 @@ export function computeFoldedGraph(
     const existing = edgeKeyMap.get(edgeKey);
     if (existing) {
       existing.count++;
+      if (!existing.sourceFiles.includes(edge.source)) {
+        existing.sourceFiles.push(edge.source);
+      }
+      if (!existing.targetFiles.includes(edge.target)) {
+        existing.targetFiles.push(edge.target);
+      }
     } else {
       edgeKeyMap.set(edgeKey, {
         id: `e-${edgeKey}`,
@@ -294,6 +302,8 @@ export function computeFoldedGraph(
         target: tgtNode,
         sourceFile: edge.source,
         targetFile: edge.target,
+        sourceFiles: [edge.source],
+        targetFiles: [edge.target],
         count: 1,
       });
     }

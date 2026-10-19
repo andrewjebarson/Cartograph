@@ -1,10 +1,25 @@
 import Link from "next/link";
 import { listAnalyses } from "@/lib/db";
+import { getSessionUser } from "@/lib/auth";
 import { seedSampleData, clearAllData } from "./actions";
 import { NewRepoForm } from "@/components/dashboard/new-repo-form";
 import { AnalysesTable } from "@/components/dashboard/analyses-table";
+import { LandingPage } from "@/components/landing/landing-page";
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ repo?: string }>;
+}) {
+  const user = await getSessionUser();
+  const { repo } = await searchParams;
+
+  // Signed out: Render Phase 13 Landing Page
+  if (!user) {
+    return <LandingPage isAuthenticated={false} />;
+  }
+
+  // Signed in: Render Repository Analyses Dashboard
   const analyses = listAnalyses();
 
   return (
@@ -53,7 +68,7 @@ export default async function DashboardPage() {
         <h2 className="text-xs font-mono font-medium text-fg mb-2">
           Analyze Public Repository
         </h2>
-        <NewRepoForm />
+        <NewRepoForm initialUrl={repo} />
       </div>
 
       {/* Analyses List */}

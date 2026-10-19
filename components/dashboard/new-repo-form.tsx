@@ -3,9 +3,13 @@
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 
-export function NewRepoForm() {
+interface NewRepoFormProps {
+  initialUrl?: string;
+}
+
+export function NewRepoForm({ initialUrl = "" }: NewRepoFormProps) {
   const router = useRouter();
-  const [url, setUrl] = useState("");
+  const [url, setUrl] = useState(initialUrl);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
