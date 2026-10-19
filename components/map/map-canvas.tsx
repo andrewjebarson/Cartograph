@@ -157,6 +157,44 @@ function InnerMapCanvas({
     prevExpandedCount.current = expandedNodeIds.size;
   }, [expandedNodeIds, fitView, getZoom]);
 
+  // Center/pan canvas to selected file or folder
+  const prevSelectedId = useRef<string | null>(null);
+  useEffect(() => {
+    if (!selectedId) {
+      prevSelectedId.current = null;
+      return;
+    }
+    if (selectedId === prevSelectedId.current) return;
+    prevSelectedId.current = selectedId;
+
+    const targetNodeId = fileToNodeMap.get(selectedId) || selectedId;
+
+    const timer = setTimeout(() => {
+      if (fileToNodeMap.has(selectedId)) {
+        setExpandedNodeIds((prev) => {
+          if (prev.has(targetNodeId)) return prev;
+          const next = new Set(prev);
+          next.add(targetNodeId);
+          return next;
+        });
+      }
+
+      try {
+        fitView({
+          nodes: [{ id: targetNodeId }],
+          duration: 350,
+          padding: 0.3,
+        });
+      } catch {
+        // ignore layout race
+      }
+    }, 50);
+
+    return () => clearTimeout(timer);
+  }, [selectedId, fileToNodeMap, fitView]);
+
+
+
   // Convert to React Flow Nodes
   const nodes: Node[] = useMemo(() => {
     const hasSelection = Boolean(selectedId);

@@ -182,6 +182,7 @@ export function ExplorerShell({
 
         {/* Right Pane: Details, Blast Radius & Insights */}
         <RightPane
+          analysisId={analysisId}
           selectedId={selectedId}
           parseResult={parseResult}
           foldedNodes={foldedGraph.nodes}

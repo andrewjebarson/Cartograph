@@ -251,6 +251,7 @@ export async function runAnalysisPipeline(
       finalFramework,
       adapterResult.routes,
       adapterResult.fileRoles,
+      fileContents,
     );
 
     // Complete!

@@ -77,10 +77,22 @@ CREATE TABLE IF NOT EXISTS insights (
 
 CREATE TABLE IF NOT EXISTS explanations (
   id TEXT PRIMARY KEY,
-  file_id TEXT NOT NULL REFERENCES files(id) ON DELETE CASCADE,
+  file_id TEXT,
+  target_path TEXT NOT NULL,
   content_hash TEXT NOT NULL,
   model TEXT NOT NULL,
   explanation TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS ai_traces (
+  id TEXT PRIMARY KEY,
+  analysis_id TEXT,
+  target_path TEXT NOT NULL,
+  content_hash TEXT NOT NULL,
+  model TEXT NOT NULL,
+  cache_hit INTEGER NOT NULL,
+  duration_ms INTEGER NOT NULL,
   created_at TEXT NOT NULL
 );
 
@@ -88,4 +100,6 @@ CREATE INDEX IF NOT EXISTS idx_analyses_project ON analyses(project_id);
 CREATE INDEX IF NOT EXISTS idx_files_analysis ON files(analysis_id);
 CREATE INDEX IF NOT EXISTS idx_edges_analysis ON edges(analysis_id);
 CREATE INDEX IF NOT EXISTS idx_routes_analysis ON routes(analysis_id);
+CREATE INDEX IF NOT EXISTS idx_explanations_hash_model ON explanations(content_hash, model);
+CREATE INDEX IF NOT EXISTS idx_ai_traces_hash ON ai_traces(content_hash);
 `;

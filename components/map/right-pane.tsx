@@ -13,8 +13,10 @@ import {
   computeTransitiveWalk,
   computeInsights,
 } from "../../lib/graph/insights.ts";
+import { ExplanationPanel, type ExplanationData } from "./explanation-panel.tsx";
 
 interface RightPaneProps {
+  analysisId?: string;
   selectedId: string | null;
   parseResult: ParseResult;
   foldedNodes: FoldedNodeData[];
@@ -26,6 +28,7 @@ interface RightPaneProps {
 }
 
 export function RightPane({
+  analysisId,
   selectedId,
   parseResult,
   foldedNodes,
@@ -37,6 +40,44 @@ export function RightPane({
 }: RightPaneProps) {
   // Tab state survives selection changes
   const [activeTab, setActiveTab] = useState<"structure" | "explanation">("structure");
+
+  // Phase 10: Explanation cache state across selections
+  const [explanations, setExplanations] = useState<Record<string, ExplanationData>>({});
+  const [isLoadingExplanation, setIsLoadingExplanation] = useState(false);
+  const [explanationError, setExplanationError] = useState<string | null>(null);
+
+  const handleExplain = async (
+    targetPath: string,
+    targetType: "file" | "folder",
+    forceRefresh = false,
+  ) => {
+    setIsLoadingExplanation(true);
+    setExplanationError(null);
+    try {
+      const res = await fetch("/api/explain", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          analysisId: analysisId || "default",
+          targetPath,
+          targetType,
+          forceRefresh,
+        }),
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+        throw new Error(errData.error || `Failed to generate explanation (${res.status})`);
+      }
+
+      const data: ExplanationData = await res.json();
+      setExplanations((prev) => ({ ...prev, [targetPath]: data }));
+    } catch (err) {
+      setExplanationError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setIsLoadingExplanation(false);
+    }
+  };
 
   // Phase 6: Transitive walk mode for selected file ('direct' | 'blast-radius' | 'dependency-chain')
   const [walkMode, setWalkMode] = useState<"direct" | "blast-radius" | "dependency-chain">("direct");
@@ -151,31 +192,15 @@ export function RightPane({
       {/* Pane Content Body */}
       <div className="flex-1 overflow-y-auto p-3 space-y-4">
         {activeTab === "explanation" ? (
-          /* Explanation Tab (Empty state until Phase 6 / 7 AI integration) */
-          <div className="py-8 px-2 flex flex-col items-center text-center">
-            <div className="w-10 h-10 rounded-full bg-amber-500/10 flex items-center justify-center text-amber-500 mb-3">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={1.5}
-                  d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
-                />
-              </svg>
-            </div>
-            <h3 className="text-xs font-semibold text-zinc-900 dark:text-zinc-100">
-              AI Code Explanation
-            </h3>
-            <p className="text-[11px] text-zinc-400 mt-1.5 max-w-xs leading-relaxed font-sans">
-              Model-driven explanation will be generated here in Phase 6 &amp; 7
-              using local Ollama or Gemini free tier.
-            </p>
-            <div className="mt-4 p-2 rounded bg-zinc-50 dark:bg-zinc-900/80 border border-zinc-200 dark:border-zinc-800 text-[10px] font-mono text-zinc-400 text-left w-full space-y-1">
-              <div>• Cache reads will appear inside trace.</div>
-              <div>• Cache hit will record zero model calls.</div>
-              <div>• Tab selection is preserved across files.</div>
-            </div>
-          </div>
+          <ExplanationPanel
+            selectedId={selectedId}
+            files={parseResult.files}
+            currentExplanation={selectedId ? explanations[selectedId] || null : null}
+            isLoading={isLoadingExplanation}
+            error={explanationError}
+            onExplain={handleExplain}
+            onSelectFile={(path) => onSelect(path)}
+          />
         ) : !selectedId ? (
           /* RESTING STATE: Repository Overview when nothing is selected */
           <div className="space-y-4">

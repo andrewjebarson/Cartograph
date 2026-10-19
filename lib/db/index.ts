@@ -1,9 +1,9 @@
 import { DatabaseSync } from "node:sqlite";
 import path from "node:path";
 import fs from "node:fs";
-import { SCHEMA_SQL } from "./schema";
-import type { ParseResult, ParsedFile, ResolvedEdge } from "../parser/types";
-import type { ExtractedRoute } from "../adapters/types";
+import { SCHEMA_SQL } from "./schema.ts";
+import type { ParseResult, ParsedFile, ResolvedEdge } from "../parser/types.ts";
+import type { ExtractedRoute } from "../adapters/types.ts";
 
 export interface Project {
   id: string;
@@ -82,6 +82,9 @@ function migrateSchema(db: DatabaseSync) {
     if (!filesCols.has("role")) {
       db.exec("ALTER TABLE files ADD COLUMN role TEXT");
     }
+    if (!filesCols.has("content")) {
+      db.exec("ALTER TABLE files ADD COLUMN content TEXT");
+    }
 
     const edgesCols = new Set(
       (db.prepare("PRAGMA table_info(edges)").all() as { name: string }[]).map((c) => c.name)
@@ -96,6 +99,51 @@ function migrateSchema(db: DatabaseSync) {
     if (!routesCols.has("line_number")) {
       db.exec("ALTER TABLE routes ADD COLUMN line_number INTEGER DEFAULT 1");
     }
+
+    const explanationsInfo = db.prepare("PRAGMA table_info(explanations)").all() as {
+      name: string;
+      notnull: number;
+    }[];
+    const explanationsCols = new Set(explanationsInfo.map((c) => c.name));
+    if (!explanationsCols.has("target_path")) {
+      db.exec("ALTER TABLE explanations ADD COLUMN target_path TEXT DEFAULT ''");
+    }
+
+    const fileIdCol = explanationsInfo.find((c) => c.name === "file_id");
+    if (fileIdCol && fileIdCol.notnull === 1) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS explanations_new (
+          id TEXT PRIMARY KEY,
+          file_id TEXT,
+          target_path TEXT NOT NULL DEFAULT '',
+          content_hash TEXT NOT NULL,
+          model TEXT NOT NULL,
+          explanation TEXT NOT NULL,
+          created_at TEXT NOT NULL
+        );
+        INSERT INTO explanations_new (id, file_id, target_path, content_hash, model, explanation, created_at)
+        SELECT id, file_id, COALESCE(target_path, ''), content_hash, model, explanation, created_at FROM explanations;
+        DROP TABLE explanations;
+        ALTER TABLE explanations_new RENAME TO explanations;
+        CREATE INDEX IF NOT EXISTS idx_explanations_hash_model ON explanations(content_hash, model);
+      `);
+    }
+
+
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS ai_traces (
+        id TEXT PRIMARY KEY,
+        analysis_id TEXT,
+        target_path TEXT NOT NULL,
+        content_hash TEXT NOT NULL,
+        model TEXT NOT NULL,
+        cache_hit INTEGER NOT NULL,
+        duration_ms INTEGER NOT NULL,
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_explanations_hash_model ON explanations(content_hash, model);
+      CREATE INDEX IF NOT EXISTS idx_ai_traces_hash ON ai_traces(content_hash);
+    `);
   } catch (err) {
     console.error("Schema migration warning:", err);
   }
@@ -289,9 +337,17 @@ export function storeAnalysisData(
   framework: string,
   routes: ExtractedRoute[] = [],
   fileRoles: Map<string, string> = new Map(),
+  fileContents?: { path: string; content: string }[],
 ) {
   const db = getDb();
   const now = new Date().toISOString();
+
+  const contentMap = new Map<string, string>();
+  if (fileContents) {
+    for (const item of fileContents) {
+      contentMap.set(item.path, item.content);
+    }
+  }
 
   // Run in a transaction
   db.exec("BEGIN TRANSACTION");
@@ -306,8 +362,8 @@ export function storeAnalysisData(
       INSERT INTO files (
         id, analysis_id, path, extension, skip_reason,
         line_count, byte_size, content_hash, package_or_namespace, role,
-        fan_in, fan_out
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        fan_in, fan_out, content
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     const insertRole = db.prepare(`
@@ -322,6 +378,7 @@ export function storeAnalysisData(
       const fileId = `${analysisId}_f_${i}`;
       fileIdMap.set(f.path, fileId);
       const role = fileRoles.get(f.path) || f.role || null;
+      const content = contentMap.get(f.path) || null;
       insertFile.run(
         fileId,
         analysisId,
@@ -335,6 +392,7 @@ export function storeAnalysisData(
         role,
         f.fanIn,
         f.fanOut,
+        content,
       );
 
       if (role) {
@@ -542,5 +600,165 @@ export function getAnalysisGraph(analysisId: string): ParseResult | null {
       unresolvedImports: analysis.unresolved_count,
       resolutionRate: analysis.coverage_rate,
     },
+  };
+}
+
+export interface CachedExplanation {
+  id: string;
+  file_id: string | null;
+  target_path: string | null;
+  content_hash: string;
+  model: string;
+  explanation: string;
+  created_at: string;
+}
+
+export function getCachedExplanation(
+  contentHash: string,
+  model: string,
+): CachedExplanation | undefined {
+  const db = getDb();
+  const row = db.prepare(`
+    SELECT id, file_id, target_path, content_hash, model, explanation, created_at
+    FROM explanations
+    WHERE content_hash = ? AND model = ?
+    ORDER BY created_at DESC
+    LIMIT 1
+  `).get(contentHash, model);
+  return toPlain(row) as CachedExplanation | undefined;
+}
+
+export function saveExplanation(params: {
+  fileId?: string | null;
+  targetPath: string;
+  contentHash: string;
+  model: string;
+  explanation: string;
+}): void {
+  const db = getDb();
+  const id = `exp_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+  const now = new Date().toISOString();
+  db.prepare(`
+    INSERT INTO explanations (id, file_id, target_path, content_hash, model, explanation, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    id,
+    params.fileId || null,
+    params.targetPath,
+    params.contentHash,
+    params.model,
+    params.explanation,
+    now,
+  );
+}
+
+export function recordAiTrace(params: {
+  analysisId?: string | null;
+  targetPath: string;
+  contentHash: string;
+  model: string;
+  cacheHit: boolean;
+  durationMs: number;
+}): void {
+  const db = getDb();
+  const id = `trc_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+  const now = new Date().toISOString();
+  db.prepare(`
+    INSERT INTO ai_traces (id, analysis_id, target_path, content_hash, model, cache_hit, duration_ms, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    id,
+    params.analysisId || null,
+    params.targetPath,
+    params.contentHash,
+    params.model,
+    params.cacheHit ? 1 : 0,
+    params.durationMs,
+    now,
+  );
+}
+
+export function getFileRecord(analysisId: string, filePath: string) {
+  const db = getDb();
+  const row = db.prepare(`
+    SELECT id, path, role, content_hash, content, line_count, byte_size, fan_in, fan_out
+    FROM files
+    WHERE analysis_id = ? AND path = ?
+  `).get(analysisId, filePath);
+  return toPlain(row) as
+    | {
+        id: string;
+        path: string;
+        role: string | null;
+        content_hash: string | null;
+        content: string | null;
+        line_count: number;
+        byte_size: number;
+        fan_in: number;
+        fan_out: number;
+      }
+    | undefined;
+}
+
+export function getFileNeighbors(analysisId: string, filePath: string) {
+  const db = getDb();
+  const outgoingRows = db.prepare(`
+    SELECT to_path FROM edges WHERE analysis_id = ? AND from_path = ?
+  `).all(analysisId, filePath) as { to_path: string }[];
+
+  const incomingRows = db.prepare(`
+    SELECT from_path FROM edges WHERE analysis_id = ? AND to_path = ?
+  `).all(analysisId, filePath) as { from_path: string }[];
+
+  return {
+    imports: Array.from(new Set(outgoingRows.map((r) => r.to_path))),
+    importedBy: Array.from(new Set(incomingRows.map((r) => r.from_path))),
+  };
+}
+
+export function getFolderDetails(analysisId: string, folderPath: string) {
+  const db = getDb();
+  const folderPrefix = folderPath.endsWith("/") ? folderPath : folderPath + "/";
+
+  // Files in folder
+  const files = db.prepare(`
+    SELECT id, path, role, content_hash, line_count
+    FROM files
+    WHERE analysis_id = ? AND (path LIKE ? OR path = ?)
+  `).all(analysisId, folderPrefix + "%", folderPath) as {
+    id: string;
+    path: string;
+    role: string | null;
+    content_hash: string | null;
+    line_count: number;
+  }[];
+
+  const filePathsSet = new Set(files.map((f) => f.path));
+
+  // Edges
+  const allEdges = db.prepare(`
+    SELECT from_path, to_path FROM edges WHERE analysis_id = ?
+  `).all(analysisId) as { from_path: string; to_path: string }[];
+
+  const incomingFiles = new Set<string>();
+  const outgoingFiles = new Set<string>();
+
+  for (const edge of allEdges) {
+    const isFromInside = filePathsSet.has(edge.from_path);
+    const isToInside = filePathsSet.has(edge.to_path);
+
+    if (isFromInside && !isToInside) {
+      outgoingFiles.add(edge.to_path);
+    } else if (!isFromInside && isToInside) {
+      incomingFiles.add(edge.from_path);
+    }
+  }
+
+  return {
+    files: files.map((f) => ({ path: f.path, role: f.role || undefined, contentHash: f.content_hash || undefined })),
+    fanIn: incomingFiles.size,
+    fanOut: outgoingFiles.size,
+    incomingFiles: Array.from(incomingFiles),
+    outgoingFiles: Array.from(outgoingFiles),
   };
 }
