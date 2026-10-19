@@ -11,7 +11,9 @@
     "eval:paths": "node --no-warnings scripts/eval-paths.ts",
     "eval:roles": "node --no-warnings scripts/eval-roles.ts",
     "eval:prompts": "node --no-warnings scripts/eval-prompts.ts",
-    "evals": "node --no-warnings scripts/evals.ts"
+    "eval:agent": "node --no-warnings scripts/eval-agent.ts",
+    "evals": "node --no-warnings scripts/evals.ts",
+    "agent": "node --no-warnings agent/server.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.117.2",

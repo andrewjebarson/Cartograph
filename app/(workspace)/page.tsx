@@ -1,14 +1,11 @@
-import { listAnalyses, getLatestPromptExperiment, getEvalSummary } from "@/lib/db";
+import Link from "next/link";
+import { listAnalyses } from "@/lib/db";
 import { seedSampleData, clearAllData } from "./actions";
 import { NewRepoForm } from "@/components/dashboard/new-repo-form";
 import { AnalysesTable } from "@/components/dashboard/analyses-table";
-import { EvalsSection } from "@/components/dashboard/evals-section";
 
 export default async function DashboardPage() {
   const analyses = listAnalyses();
-  const latestExperiment = getLatestPromptExperiment();
-  const evalSummary = getEvalSummary();
-
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-8">
@@ -24,6 +21,12 @@ export default async function DashboardPage() {
         </div>
 
         <div className="flex items-center gap-2">
+          <Link
+            href="/evals"
+            className="h-7 inline-flex items-center rounded border border-line bg-surface px-2.5 font-mono text-[11px] text-fg-muted transition-colors hover:text-fg"
+          >
+            Phase 11 Evals →
+          </Link>
           {analyses.length > 0 && (
             <form action={clearAllData}>
               <button
@@ -75,9 +78,6 @@ export default async function DashboardPage() {
           <AnalysesTable initialAnalyses={analyses} />
         </div>
       )}
-
-      {/* Phase 11: Prompt Versions & Answer Quality Evals */}
-      <EvalsSection initialExperiment={latestExperiment} evalSummary={evalSummary} />
     </div>
   );
 }

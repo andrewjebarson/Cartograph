@@ -14,6 +14,7 @@ import {
   computeInsights,
 } from "../../lib/graph/insights.ts";
 import { ExplanationPanel, type ExplanationData } from "./explanation-panel.tsx";
+import { AskPanel } from "./ask-panel.tsx";
 
 interface RightPaneProps {
   analysisId?: string;
@@ -38,6 +39,9 @@ export function RightPane({
   onSelect,
   onHover,
 }: RightPaneProps) {
+  // Phase 12: Ask mode replaces the whole pane
+  const [isAskMode, setIsAskMode] = useState(false);
+
   // Tab state survives selection changes
   const [activeTab, setActiveTab] = useState<"structure" | "explanation">("structure");
 
@@ -142,6 +146,18 @@ export function RightPane({
     return computeFolderDetails(selectedId, foldedNodes, edges);
   }, [isFolderSelected, selectedId, foldedNodes, edges]);
 
+  // Phase 12: Ask mode replaces the whole pane
+  if (isAskMode) {
+    return (
+      <AskPanel
+        analysisId={analysisId}
+        selectedId={selectedId}
+        onSelect={onSelect}
+        onClose={() => setIsAskMode(false)}
+      />
+    );
+  }
+
   return (
     <aside className="w-84 shrink-0 border-l border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 flex flex-col h-full select-none overflow-hidden">
       {/* Pane Header with Tabs */}
@@ -153,15 +169,25 @@ export function RightPane({
             </span>
           </div>
 
-          {selectedId && (
+          <div className="flex items-center gap-1.5">
             <button
-              onClick={() => onSelect(null)}
-              className="text-[11px] font-mono text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800"
-              title="Clear selection (return to repository summary)"
+              onClick={() => setIsAskMode(true)}
+              className="text-[11px] font-mono font-medium text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300 px-2 py-0.5 rounded bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 transition-colors flex items-center gap-1"
+              title="Ask the repository a question (replaces pane)"
             >
-              Clear ✕
+              <span>💬</span>
+              <span>Ask</span>
             </button>
-          )}
+            {selectedId && (
+              <button
+                onClick={() => onSelect(null)}
+                className="text-[11px] font-mono text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800"
+                title="Clear selection (return to repository summary)"
+              >
+                Clear ✕
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Persistent Tabs */}
