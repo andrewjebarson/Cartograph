@@ -1,15 +1,49 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { THEME_COOKIE, THEMES, type Theme } from "@/lib/theme";
 
+function updateDomTheme(theme: Theme) {
+  if (typeof document === "undefined") return;
+  const d = document.documentElement;
+  d.dataset.theme = theme;
+
+  const isDark =
+    theme === "dark" ||
+    (theme === "system" &&
+      typeof window !== "undefined" &&
+      window.matchMedia("(prefers-color-scheme: dark)").matches);
+
+  if (isDark) {
+    d.classList.add("dark");
+    d.classList.remove("light");
+    d.style.colorScheme = "dark";
+  } else {
+    d.classList.add("light");
+    d.classList.remove("dark");
+    d.style.colorScheme = "light";
+  }
+}
+
 function applyTheme(theme: Theme) {
-  document.documentElement.dataset.theme = theme;
+  updateDomTheme(theme);
   document.cookie = `${THEME_COOKIE}=${theme}; path=/; max-age=31536000; samesite=lax`;
 }
 
 export function ThemeControl({ initial }: { initial: Theme }) {
   const [theme, setTheme] = useState<Theme>(initial);
+
+  useEffect(() => {
+    updateDomTheme(theme);
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    const onChange = () => {
+      if (document.documentElement.dataset.theme === "system") {
+        updateDomTheme("system");
+      }
+    };
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, [theme]);
 
   function choose(next: Theme) {
     setTheme(next);

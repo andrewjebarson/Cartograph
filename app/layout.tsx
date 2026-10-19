@@ -25,13 +25,37 @@ export default async function RootLayout({
   children: React.ReactNode;
 }) {
   const theme = parseTheme((await cookies()).get(THEME_COOKIE)?.value);
+  const themeClass = theme === "dark" ? "dark" : theme === "light" ? "light" : "";
 
   return (
     <html
       lang="en"
       data-theme={theme}
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} ${themeClass} h-full antialiased`}
+      suppressHydrationWarning
     >
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){
+              try {
+                var d = document.documentElement;
+                var t = d.getAttribute('data-theme') || 'system';
+                var isDark = t === 'dark' || (t === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+                if (isDark) {
+                  d.classList.add('dark');
+                  d.classList.remove('light');
+                  d.style.colorScheme = 'dark';
+                } else {
+                  d.classList.add('light');
+                  d.classList.remove('dark');
+                  d.style.colorScheme = 'light';
+                }
+              } catch(e) {}
+            })()`,
+          }}
+        />
+      </head>
       <body className="flex h-full flex-col overflow-hidden">{children}</body>
     </html>
   );

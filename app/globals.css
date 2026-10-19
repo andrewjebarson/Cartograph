@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 /*
  * data-theme on <html> is system | light | dark. color-scheme decides which
  * side of every light-dark() pair applies, so a forced theme beats the OS
@@ -18,16 +20,19 @@
   --accent-fg: #ffffff;
 }
 
-:root[data-theme="light"] {
+:root[data-theme="light"],
+:root.light {
   color-scheme: light;
 }
 
-:root[data-theme="dark"] {
+:root[data-theme="dark"],
+:root.dark {
   color-scheme: dark;
 }
 
 @theme inline {
   --color-canvas: var(--canvas);
+  --color-background: var(--canvas);
   --color-surface: var(--surface);
   --color-raised: var(--raised);
   --color-line: var(--line);

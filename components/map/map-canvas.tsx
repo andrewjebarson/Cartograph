@@ -403,7 +403,7 @@ function InnerMapCanvas({
         onNodeMouseEnter={(_, node) => onHover(node.id)}
         onNodeMouseLeave={() => onHover(null)}
       >
-        <Background gap={18} size={1} className="!opacity-40" />
+        <Background gap={18} size={1} color="#94a3b8" className="!opacity-30 dark:!opacity-40" />
         <Controls
           className="!bg-white dark:!bg-zinc-900 !border-zinc-300 dark:!border-zinc-700 !fill-zinc-700 dark:!fill-zinc-300"
           showInteractive={false}
@@ -418,10 +418,10 @@ function InnerMapCanvas({
           maskColor="rgba(245, 158, 11, 0.15)"
           maskStrokeColor="#f59e0b"
           maskStrokeWidth={1}
-          bgColor="#18181b"
+          bgColor="transparent"
           pannable
           zoomable
-          className="!border !border-zinc-700 !bg-zinc-900/95 !rounded-md !shadow-xl"
+          className="!border !border-zinc-300 dark:!border-zinc-700 !bg-white/95 dark:!bg-zinc-900/95 !rounded-md !shadow-xl"
         />
       </ReactFlow>
     </div>
