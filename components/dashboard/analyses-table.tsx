@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { Analysis } from "@/lib/db";
@@ -9,17 +9,32 @@ interface AnalysesTableProps {
   initialAnalyses: Analysis[];
 }
 
+let cachedClientTime = 0;
+if (typeof window !== "undefined") {
+  cachedClientTime = Date.now();
+}
+
 const subscribeTime = (callback: () => void) => {
-  const timer = setInterval(callback, 30000);
+  const timer = setInterval(() => {
+    cachedClientTime = Date.now();
+    callback();
+  }, 10000);
   return () => clearInterval(timer);
 };
-const getClientTime = () => Date.now();
+const getClientTime = () => cachedClientTime;
 const getServerTime = () => 0;
 
 export function AnalysesTable({ initialAnalyses }: AnalysesTableProps) {
   const router = useRouter();
   const [realtimeOverrides, setRealtimeOverrides] = useState<Record<string, Partial<Analysis>>>({});
   const currentTime = React.useSyncExternalStore(subscribeTime, getClientTime, getServerTime);
+  const knownIdsRef = useRef(new Set(initialAnalyses.map((a) => a.id)));
+
+  useEffect(() => {
+    for (const a of initialAnalyses) {
+      knownIdsRef.current.add(a.id);
+    }
+  }, [initialAnalyses]);
 
   // Acceptance Check 4: Open the dashboard in a second tab during a run. The stage updates there too, without a refresh.
   useEffect(() => {
@@ -40,8 +55,9 @@ export function AnalysesTable({ initialAnalyses }: AnalysesTableProps) {
             },
           }));
 
-          // If a new analysis was created, refresh router data
-          if (!initialAnalyses.some((a) => a.id === event.analysisId)) {
+          // If a new analysis was created that wasn't in the initial list, refresh router data once
+          if (!knownIdsRef.current.has(event.analysisId)) {
+            knownIdsRef.current.add(event.analysisId);
             router.refresh();
           }
         }
@@ -53,7 +69,7 @@ export function AnalysesTable({ initialAnalyses }: AnalysesTableProps) {
     return () => {
       es.close();
     };
-  }, [initialAnalyses, router]);
+  }, [router]);
 
   const analyses = useMemo(() => {
     return initialAnalyses.map((a) => {
@@ -88,6 +104,7 @@ export function AnalysesTable({ initialAnalyses }: AnalysesTableProps) {
         <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
           {analyses.map((a) => {
             const stale = isStale(a);
+            const dateStr = a.created_at ? a.created_at.slice(0, 10) : "—";
 
             return (
               <tr
@@ -160,7 +177,7 @@ export function AnalysesTable({ initialAnalyses }: AnalysesTableProps) {
                   {a.commit_sha ?? "—"}
                 </td>
                 <td className="px-4 py-3 text-right font-mono text-[11px] text-zinc-400">
-                  {new Date(a.created_at).toLocaleDateString()}
+                  {dateStr}
                 </td>
               </tr>
             );
