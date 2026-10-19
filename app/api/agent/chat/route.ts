@@ -1,15 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAnalysis } from "@/lib/db";
 import { mintAgentToken } from "@/lib/agent/credentials";
+import { runAgentLoop } from "@/agent/engine";
+import type { ConversationThread, AgentStreamEvent } from "@/agent/types";
+import { getAiConfig } from "@/lib/ai/client";
 
 export const dynamic = "force-dynamic";
 
+// In-memory conversation threads for session continuity
+const threads = new Map<string, ConversationThread>();
+
 /**
  * Entry point for Phase 12 Agent Chat.
+ * Runs directly inside Next.js (no separate port needed).
  * 1. Proves the user owns the analysis (looks up in DB).
  * 2. Mints the short-lived signed credential token (analysisId is NEVER exposed to the prompt).
- * 3. Relays the SSE stream from the standalone Agent Service.
- * 4. Gracefully fails if the Agent Service is offline (resilience check 5).
+ * 3. Streams tool execution and responses directly over SSE.
  */
 export async function POST(req: NextRequest) {
   let body: {
@@ -25,7 +31,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON request body." }, { status: 400 });
   }
 
-  const { analysisId, message, threadId, selectedContext } = body;
+  const { analysisId, message, threadId = `thread_${Date.now()}`, selectedContext } = body;
 
   if (!analysisId || !message) {
     return NextResponse.json(
@@ -43,80 +49,89 @@ export async function POST(req: NextRequest) {
   // 2. Mint the short-lived signed credential (TTL: 15 minutes)
   const token = mintAgentToken(analysisId, analysis.repo_owner || "local-org", 900);
 
-  // 3. Connect to the standalone Agent Service
-  const agentServiceUrl = process.env.AGENT_SERVICE_URL || "http://127.0.0.1:3001";
+  // 3. Get or initialize conversation thread
+  let thread = threads.get(threadId);
+  if (!thread) {
+    thread = {
+      id: threadId,
+      messages: [],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    threads.set(threadId, thread);
+  }
+
+  // Add user message to history
+  thread.messages.push({
+    id: `msg_${Date.now()}_u`,
+    role: "user",
+    content: message,
+    createdAt: new Date().toISOString(),
+  });
+
+  const encoder = new TextEncoder();
   const toolsBaseUrl = req.nextUrl.origin || "http://localhost:3000";
 
-  try {
-    const agentRes = await fetch(`${agentServiceUrl.replace(/\/+$/, "")}/chat`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${token}`,
-        "x-cartograph-token": token,
-        "x-tools-base-url": toolsBaseUrl,
-      },
-      body: JSON.stringify({
-        message,
-        threadId,
-        selectedContext,
-      }),
-    });
+  // 4. Create streaming response
+  const stream = new ReadableStream({
+    async start(controller) {
+      try {
+        const result = await runAgentLoop({
+          message,
+          token,
+          toolsBaseUrl,
+          thread,
+          selectedContext,
+          onEvent: (event: AgentStreamEvent) => {
+            controller.enqueue(
+              encoder.encode(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`),
+            );
+          },
+        });
 
-    if (!agentRes.ok) {
-      const errText = await agentRes.text();
-      return NextResponse.json(
-        { error: `Agent service error (${agentRes.status}): ${errText}` },
-        { status: agentRes.status },
-      );
-    }
+        // Update thread history
+        if (thread) {
+          thread.messages.push({
+            id: `msg_${Date.now()}_a`,
+            role: "assistant",
+            content: result.fullText,
+            createdAt: new Date().toISOString(),
+          });
+          if (result.lastActiveFile) {
+            thread.lastActiveFile = result.lastActiveFile;
+          }
+          thread.updatedAt = new Date().toISOString();
+        }
+      } catch (err) {
+        const errMsg = err instanceof Error ? err.message : String(err);
+        controller.enqueue(
+          encoder.encode(`event: error\ndata: ${JSON.stringify({ error: errMsg })}\n\n`),
+        );
+      } finally {
+        controller.close();
+      }
+    },
+  });
 
-    // 4. Relay the SSE stream back to the client
-    if (!agentRes.body) {
-      return NextResponse.json({ error: "No response body from agent service." }, { status: 502 });
-    }
-
-    return new Response(agentRes.body, {
-      headers: {
-        "Content-Type": "text/event-stream; charset=utf-8",
-        "Cache-Control": "no-cache, no-transform",
-        "Connection": "keep-alive",
-      },
-    });
-  } catch (err) {
-    // 5. Resilience: If agent service is offline, return 503 with helpful status
-    const isConnRefused =
-      err instanceof Error &&
-      (err.message.includes("ECONNREFUSED") || err.message.includes("fetch failed"));
-
-    return NextResponse.json(
-      {
-        error: isConnRefused
-          ? "Agent service is offline. Run `npm run agent` in a terminal to start the agent service on port 3001."
-          : `Failed to communicate with agent service: ${err instanceof Error ? err.message : String(err)}`,
-        status: "offline",
-        code: "AGENT_SERVICE_UNAVAILABLE",
-      },
-      { status: 503 },
-    );
-  }
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/event-stream; charset=utf-8",
+      "Cache-Control": "no-cache, no-transform",
+      "Connection": "keep-alive",
+    },
+  });
 }
 
 /**
  * Health probe for agent service connectivity
  */
 export async function GET() {
-  const agentServiceUrl = process.env.AGENT_SERVICE_URL || "http://127.0.0.1:3001";
-  try {
-    const res = await fetch(`${agentServiceUrl.replace(/\/+$/, "")}/health`, {
-      signal: AbortSignal.timeout(1500),
-    });
-    if (res.ok) {
-      const data = await res.json();
-      return NextResponse.json({ status: "online", service: data });
-    }
-  } catch {
-    // offline
-  }
-  return NextResponse.json({ status: "offline", agentServiceUrl });
+  const aiConfig = getAiConfig();
+  return NextResponse.json({
+    status: "online",
+    mode: "internal",
+    provider: aiConfig.provider,
+    model: aiConfig.model,
+    activeThreads: threads.size,
+  });
 }

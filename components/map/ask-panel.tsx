@@ -53,7 +53,7 @@ export function AskPanel({
   const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
   const [threadId] = useState<string>(() => `thread_${Math.random().toString(36).substring(2, 9)}`);
-  const [agentStatus, setAgentStatus] = useState<"checking" | "online" | "offline">("checking");
+  const [agentInfo, setAgentInfo] = useState<string>("Gemini");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -66,11 +66,11 @@ export function AskPanel({
       .then((res) => res.json())
       .then((data) => {
         if (!isMounted) return;
-        setAgentStatus(data.status === "online" ? "online" : "offline");
+        if (data.model) {
+          setAgentInfo(`${data.provider || "gemini"} (${data.model})`);
+        }
       })
-      .catch(() => {
-        if (isMounted) setAgentStatus("offline");
-      });
+      .catch(() => {});
     return () => {
       isMounted = false;
     };
@@ -141,13 +141,8 @@ export function AskPanel({
 
       if (!res.ok) {
         const errorJson = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
-        if (res.status === 503) {
-          setAgentStatus("offline");
-        }
         throw new Error(errorJson.error || `Request failed (${res.status})`);
       }
-
-      setAgentStatus("online");
 
       // Read SSE stream
       const reader = res.body?.getReader();
@@ -307,18 +302,8 @@ export function AskPanel({
               Ask Repository
             </span>
             <span
-              className={`inline-block w-2 h-2 rounded-full ${
-                agentStatus === "online"
-                  ? "bg-emerald-500 shadow-sm shadow-emerald-500/50"
-                  : agentStatus === "offline"
-                    ? "bg-zinc-400 dark:bg-zinc-600"
-                    : "bg-amber-500 animate-pulse"
-              }`}
-              title={
-                agentStatus === "online"
-                  ? "Agent service is online on port 3001"
-                  : "Agent service is offline. Run 'npm run agent' to start"
-              }
+              className="inline-block w-2 h-2 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/50"
+              title={`Repository Agent is active (${agentInfo})`}
             />
           </div>
 
@@ -343,16 +328,6 @@ export function AskPanel({
           )}
         </div>
       </div>
-
-      {/* Offline Alert Banner */}
-      {agentStatus === "offline" && (
-        <div className="shrink-0 bg-amber-500/10 border-b border-amber-500/20 px-3 py-2 text-[11px] font-mono text-amber-700 dark:text-amber-300">
-          <div className="font-semibold">Agent Service Offline</div>
-          <div className="text-[10px] text-zinc-500 dark:text-zinc-400 mt-0.5">
-            Run <code className="bg-amber-500/20 px-1 py-0.2 rounded font-bold">npm run agent</code> in a terminal to launch the agent service on port 3001.
-          </div>
-        </div>
-      )}
 
       {/* Messages Scroll Area */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto p-3 space-y-3.5">
