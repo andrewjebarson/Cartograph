@@ -37,7 +37,21 @@ export const ExpandedPanelNode = memo(function ExpandedPanelNode({
   const remainingCount = panelData.files.length - MAX_VISIBLE_ROWS;
 
   const matchCount = panelData.activeCategory
-    ? panelData.files.filter((f) => deriveCategory(f.path) === panelData.activeCategory).length
+    ? panelData.files.filter((f) => {
+        if (f.role) {
+          const r = f.role.toLowerCase();
+          const c = (panelData.activeCategory || "").toLowerCase();
+          if (c.includes(r) || r.includes(c)) return true;
+          if (c === "guards" && (r === "guard" || r === "directive" || r === "pipe")) return true;
+          if (c === "components" && r === "component") return true;
+          if (c === "services" && r === "service") return true;
+          if (c === "modules" && r === "module") return true;
+          if (c === "controllers" && r === "controller") return true;
+          if (c === "repositories" && r === "repository") return true;
+          if (c === "entities" && r === "entity") return true;
+        }
+        return deriveCategory(f.path) === panelData.activeCategory;
+      }).length
     : 0;
 
   return (

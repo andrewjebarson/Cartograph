@@ -3,6 +3,7 @@ import path from "node:path";
 import fs from "node:fs";
 import { SCHEMA_SQL } from "./schema";
 import type { ParseResult, ParsedFile, ResolvedEdge } from "../parser/types";
+import type { ExtractedRoute } from "../adapters/types";
 
 export interface Project {
   id: string;
@@ -78,12 +79,22 @@ function migrateSchema(db: DatabaseSync) {
     if (!filesCols.has("package_or_namespace")) {
       db.exec("ALTER TABLE files ADD COLUMN package_or_namespace TEXT");
     }
+    if (!filesCols.has("role")) {
+      db.exec("ALTER TABLE files ADD COLUMN role TEXT");
+    }
 
     const edgesCols = new Set(
       (db.prepare("PRAGMA table_info(edges)").all() as { name: string }[]).map((c) => c.name)
     );
     if (!edgesCols.has("specifier")) {
       db.exec("ALTER TABLE edges ADD COLUMN specifier TEXT");
+    }
+
+    const routesCols = new Set(
+      (db.prepare("PRAGMA table_info(routes)").all() as { name: string }[]).map((c) => c.name)
+    );
+    if (!routesCols.has("line_number")) {
+      db.exec("ALTER TABLE routes ADD COLUMN line_number INTEGER DEFAULT 1");
     }
   } catch (err) {
     console.error("Schema migration warning:", err);
@@ -276,6 +287,8 @@ export function storeAnalysisData(
   parseResult: ParseResult,
   commitSha: string,
   framework: string,
+  routes: ExtractedRoute[] = [],
+  fileRoles: Map<string, string> = new Map(),
 ) {
   const db = getDb();
   const now = new Date().toISOString();
@@ -283,22 +296,32 @@ export function storeAnalysisData(
   // Run in a transaction
   db.exec("BEGIN TRANSACTION");
   try {
-    // Delete any old files / edges for this analysis
+    // Delete any old files / edges / routes for this analysis
     db.prepare("DELETE FROM files WHERE analysis_id = ?").run(analysisId);
     db.prepare("DELETE FROM edges WHERE analysis_id = ?").run(analysisId);
+    db.prepare("DELETE FROM routes WHERE analysis_id = ?").run(analysisId);
 
     // Insert files
     const insertFile = db.prepare(`
       INSERT INTO files (
         id, analysis_id, path, extension, skip_reason,
-        line_count, byte_size, content_hash, package_or_namespace,
+        line_count, byte_size, content_hash, package_or_namespace, role,
         fan_in, fan_out
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
+
+    const insertRole = db.prepare(`
+      INSERT INTO file_roles (id, file_id, role, source)
+      VALUES (?, ?, ?, 'adapter')
+    `);
+
+    const fileIdMap = new Map<string, string>();
 
     for (let i = 0; i < parseResult.files.length; i++) {
       const f = parseResult.files[i];
       const fileId = `${analysisId}_f_${i}`;
+      fileIdMap.set(f.path, fileId);
+      const role = fileRoles.get(f.path) || f.role || null;
       insertFile.run(
         fileId,
         analysisId,
@@ -309,9 +332,14 @@ export function storeAnalysisData(
         f.byteSize,
         f.contentHash,
         f.packageOrNamespace || null,
+        role,
         f.fanIn,
         f.fanOut,
       );
+
+      if (role) {
+        insertRole.run(`${analysisId}_fr_${i}`, fileId, role);
+      }
     }
 
     // Insert skipped files
@@ -326,6 +354,7 @@ export function storeAnalysisData(
         sf.reason,
         0,
         0,
+        null,
         null,
         null,
         0,
@@ -353,6 +382,26 @@ export function storeAnalysisData(
       );
     }
 
+    // Insert routes
+    const insertRoute = db.prepare(`
+      INSERT INTO routes (
+        id, analysis_id, file_id, method, path, line_number
+      ) VALUES (?, ?, ?, ?, ?, ?)
+    `);
+
+    for (let i = 0; i < routes.length; i++) {
+      const r = routes[i];
+      const fileId = fileIdMap.get(r.filePath) || null;
+      insertRoute.run(
+        r.id || `${analysisId}_r_${i}`,
+        analysisId,
+        fileId,
+        r.method,
+        r.path,
+        r.line || 1,
+      );
+    }
+
     // Update analysis record to complete
     db.prepare(`
       UPDATE analyses
@@ -363,7 +412,7 @@ export function storeAnalysisData(
           framework = ?,
           file_count = ?,
           edge_count = ?,
-          route_count = 0,
+          route_count = ?,
           coverage_rate = ?,
           unresolved_count = ?,
           updated_at = ?
@@ -373,6 +422,7 @@ export function storeAnalysisData(
       framework,
       parseResult.files.length,
       parseResult.edges.length,
+      routes.length,
       parseResult.coverage.resolutionRate,
       parseResult.coverage.unresolvedImports,
       now,
@@ -386,13 +436,38 @@ export function storeAnalysisData(
   }
 }
 
+export function getAnalysisRoutes(analysisId: string): ExtractedRoute[] {
+  const db = getDb();
+  const rows = db.prepare(`
+    SELECT r.id, r.method, r.path, COALESCE(r.line_number, 1) as line_number, f.path as file_path
+    FROM routes r
+    LEFT JOIN files f ON r.file_id = f.id
+    WHERE r.analysis_id = ?
+    ORDER BY r.path ASC
+  `).all(analysisId) as {
+    id: string;
+    method: string;
+    path: string;
+    line_number: number;
+    file_path: string | null;
+  }[];
+
+  return rows.map((row) => ({
+    id: row.id,
+    method: row.method,
+    path: row.path,
+    filePath: row.file_path || "",
+    line: row.line_number,
+  }));
+}
+
 export function getAnalysisGraph(analysisId: string): ParseResult | null {
   const db = getDb();
   const analysis = getAnalysis(analysisId);
   if (!analysis || analysis.status !== "complete") return null;
 
   const rawFiles = db.prepare(`
-    SELECT path, extension, line_count, byte_size, content_hash, package_or_namespace, fan_in, fan_out, skip_reason
+    SELECT path, extension, line_count, byte_size, content_hash, package_or_namespace, role, fan_in, fan_out, skip_reason
     FROM files
     WHERE analysis_id = ?
   `).all(analysisId) as {
@@ -402,6 +477,7 @@ export function getAnalysisGraph(analysisId: string): ParseResult | null {
     byte_size: number;
     content_hash: string | null;
     package_or_namespace: string | null;
+    role: string | null;
     fan_in: number;
     fan_out: number;
     skip_reason: string | null;
@@ -434,6 +510,7 @@ export function getAnalysisGraph(analysisId: string): ParseResult | null {
         fanIn: f.fan_in,
         fanOut: f.fan_out,
         packageOrNamespace: f.package_or_namespace || undefined,
+        role: f.role || undefined,
       });
     }
   }

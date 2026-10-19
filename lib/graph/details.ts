@@ -39,6 +39,7 @@ export interface FolderDetailsData {
 export function computeRepoSummary(
   parseResult: ParseResult,
   repoName: string = "ecommerce-fullstack",
+  routeCountOverride?: number,
 ): RepoSummaryData {
   const { files, edges, externalImports } = parseResult;
 
@@ -54,17 +55,20 @@ export function computeRepoSummary(
     framework = "Angular (TypeScript)";
   }
 
-  // Count estimated routes (controllers, endpoints, routes.ts)
-  const routeCount = files.filter((f) => {
-    const p = f.path.toLowerCase();
-    return (
-      p.includes("controller") ||
-      p.includes("endpoint") ||
-      p.includes("resource") ||
-      p.includes("routes.") ||
-      p.includes("app.routes")
-    );
-  }).length;
+  // Count exact or estimated routes
+  const routeCount =
+    routeCountOverride !== undefined
+      ? routeCountOverride
+      : files.filter((f) => {
+          const p = f.path.toLowerCase();
+          return (
+            p.includes("controller") ||
+            p.includes("endpoint") ||
+            p.includes("resource") ||
+            p.includes("routes.") ||
+            p.includes("app.routes")
+          );
+        }).length;
 
   // Most depended on: sorted by fanIn desc
   const mostDependedOn = [...files]

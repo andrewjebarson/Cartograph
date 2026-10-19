@@ -138,7 +138,21 @@ function InnerMapCanvas({
     return positionedNodes.map((n) => {
       const matchesCategory =
         !activeCategory ||
-        n.files.some((f) => deriveCategory(f.path) === activeCategory);
+        n.files.some((f) => {
+          if (f.role) {
+            const r = f.role.toLowerCase();
+            const c = activeCategory.toLowerCase();
+            if (c.includes(r) || r.includes(c)) return true;
+            if (c === "guards" && (r === "guard" || r === "directive" || r === "pipe")) return true;
+            if (c === "components" && r === "component") return true;
+            if (c === "services" && r === "service") return true;
+            if (c === "modules" && r === "module") return true;
+            if (c === "controllers" && r === "controller") return true;
+            if (c === "repositories" && r === "repository") return true;
+            if (c === "entities" && r === "entity") return true;
+          }
+          return deriveCategory(f.path) === activeCategory;
+        });
 
       const isDimmed =
         (hasSelection && !activeNodeIds.has(n.id)) || !matchesCategory;

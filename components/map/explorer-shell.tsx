@@ -4,11 +4,13 @@ import React, { useState, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ParseResult } from "@/lib/parser/types";
+import type { ExtractedRoute } from "@/lib/adapters/types";
 import { computeFoldedGraph } from "@/lib/graph/folding";
 import { LeftRail } from "./left-rail";
 import { RightPane } from "./right-pane";
 import { MapCanvas } from "./map-canvas";
 import { CoverageBanner } from "./coverage-banner";
+import { RouteTable } from "./route-table";
 
 interface ExplorerShellProps {
   analysisId: string;
@@ -17,6 +19,7 @@ interface ExplorerShellProps {
   commitSha: string | null;
   framework: string | null;
   parseResult: ParseResult;
+  routes?: ExtractedRoute[];
 }
 
 export function ExplorerShell({
@@ -26,11 +29,13 @@ export function ExplorerShell({
   commitSha,
   framework,
   parseResult,
+  routes = [],
 }: ExplorerShellProps) {
   const router = useRouter();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
+  const [isRouteTableOpen, setIsRouteTableOpen] = useState(false);
   const [isReRunning, setIsReRunning] = useState(false);
 
   const foldedGraph = useMemo(
@@ -89,7 +94,7 @@ export function ExplorerShell({
           </div>
         </div>
 
-        <div className="flex items-center gap-4 text-xs font-mono text-zinc-500">
+        <div className="flex items-center gap-3 text-xs font-mono text-zinc-500">
           <span>{parseResult.files.length} files</span>
           <span>•</span>
           <span>{parseResult.edges.length} edges</span>
@@ -104,6 +109,24 @@ export function ExplorerShell({
             {parseResult.coverage.resolutionRate.toFixed(1)}% resolution
           </span>
           <span>•</span>
+
+          {routes.length > 0 && (
+            <button
+              onClick={() => setIsRouteTableOpen(!isRouteTableOpen)}
+              className={`h-6 px-2.5 rounded border text-[11px] font-mono transition-colors flex items-center gap-1.5 ${
+                isRouteTableOpen
+                  ? "bg-amber-500 text-zinc-950 border-amber-500 font-bold"
+                  : "border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-200"
+              }`}
+              title="Toggle Route Table"
+            >
+              <span>Routes</span>
+              <span className={`px-1 py-0.2 rounded text-[10px] ${isRouteTableOpen ? "bg-zinc-950/20 text-zinc-950 font-bold" : "bg-zinc-200 dark:bg-zinc-800 text-zinc-500"}`}>
+                {routes.length}
+              </span>
+            </button>
+          )}
+
           <button
             onClick={handleReRun}
             disabled={isReRunning}
@@ -123,11 +146,26 @@ export function ExplorerShell({
           unresolvedCount={parseResult.coverage.unresolvedImports}
         />
 
-        {/* Left Rail: File Categories */}
+        {/* Route Table Overlay */}
+        <RouteTable
+          routes={routes}
+          isOpen={isRouteTableOpen}
+          onClose={() => setIsRouteTableOpen(false)}
+          onSelectRoute={(filePath) => {
+            setSelectedId(filePath);
+            setIsRouteTableOpen(false);
+          }}
+        />
+
+        {/* Left Rail: File Categories & Dynamic Framework Taxonomy */}
         <LeftRail
           files={parseResult.files}
+          framework={framework}
+          routes={routes}
           activeCategory={activeCategory}
           onSelectCategory={setActiveCategory}
+          onOpenRouteTable={() => setIsRouteTableOpen(!isRouteTableOpen)}
+          isRouteTableOpen={isRouteTableOpen}
         />
 
         {/* Middle Column: Interactive Map Canvas */}
@@ -149,6 +187,7 @@ export function ExplorerShell({
           foldedNodes={foldedGraph.nodes}
           edges={foldedGraph.edges}
           hoveredId={hoveredId}
+          routes={routes}
           onSelect={setSelectedId}
           onHover={setHoveredId}
         />

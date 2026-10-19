@@ -2,63 +2,153 @@
 
 import React, { useMemo } from "react";
 import type { ParsedFile } from "../../lib/parser/types.ts";
+import type { ExtractedRoute } from "../../lib/adapters/types.ts";
 import { deriveCategory } from "../../lib/graph/folding.ts";
 
 interface CategoryStat {
+  id: string;
   name: string;
   count: number;
   color: string;
+  isRouteCategory?: boolean;
 }
-
-const CATEGORY_COLORS: Record<string, string> = {
-  "Controllers & API": "#3b82f6", // blue
-  "Services & Logic": "#10b981", // emerald
-  "Repositories & Storage": "#8b5cf6", // violet
-  "Models & DTOs": "#f59e0b", // amber
-  "Security & Auth": "#ef4444", // red
-  "Configuration": "#6b7280", // gray
-  "UI Components": "#06b6d4", // cyan
-  "Styles & Assets": "#ec4899", // pink
-  "General Code": "#64748b", // slate
-};
 
 interface LeftRailProps {
   files: ParsedFile[];
+  framework?: string | null;
+  routes?: ExtractedRoute[];
   activeCategory: string | null;
   onSelectCategory: (category: string | null) => void;
+  onOpenRouteTable?: () => void;
+  isRouteTableOpen?: boolean;
 }
 
 export function LeftRail({
   files,
+  framework,
+  routes = [],
   activeCategory,
   onSelectCategory,
+  onOpenRouteTable,
+  isRouteTableOpen = false,
 }: LeftRailProps) {
-  const categories: CategoryStat[] = useMemo(() => {
-    const counts = new Map<string, number>();
+  const isAngular = useMemo(() => {
+    if (framework && framework.toLowerCase().includes("angular")) return true;
+    return files.some(
+      (f) =>
+        f.role === "component" ||
+        f.role === "module" ||
+        f.path.toLowerCase().endsWith(".component.ts"),
+    );
+  }, [framework, files]);
 
+  const isSpringBoot = useMemo(() => {
+    if (framework && framework.toLowerCase().includes("spring")) return true;
+    return files.some(
+      (f) =>
+        f.role === "controller" ||
+        f.role === "repository" ||
+        f.extension === ".java",
+    );
+  }, [framework, files]);
+
+  const categories: CategoryStat[] = useMemo(() => {
+    if (isAngular) {
+      // Dynamic taxonomy for Angular: Components, Services, Modules, Guards, Routes
+      let componentCount = 0;
+      let serviceCount = 0;
+      let moduleCount = 0;
+      let guardCount = 0;
+
+      for (const f of files) {
+        if (f.role === "component" || f.path.toLowerCase().endsWith(".component.ts")) {
+          componentCount++;
+        } else if (f.role === "service" || f.path.toLowerCase().endsWith(".service.ts")) {
+          serviceCount++;
+        } else if (f.role === "module" || f.path.toLowerCase().endsWith(".module.ts")) {
+          moduleCount++;
+        } else if (
+          f.role === "guard" ||
+          f.role === "directive" ||
+          f.role === "pipe" ||
+          f.path.toLowerCase().endsWith(".guard.ts") ||
+          f.path.toLowerCase().endsWith(".interceptor.ts")
+        ) {
+          guardCount++;
+        }
+      }
+
+      return [
+        { id: "component", name: "Components", count: componentCount, color: "#06b6d4" },
+        { id: "service", name: "Services", count: serviceCount, color: "#10b981" },
+        { id: "module", name: "Modules", count: moduleCount, color: "#8b5cf6" },
+        { id: "guard", name: "Guards", count: guardCount, color: "#ef4444" },
+        { id: "route", name: "Routes", count: routes.length, color: "#f59e0b", isRouteCategory: true },
+      ];
+    }
+
+    if (isSpringBoot) {
+      // Dynamic taxonomy for Spring Boot: Controllers, Services, Repositories, Entities, Endpoints
+      let controllerCount = 0;
+      let serviceCount = 0;
+      let repositoryCount = 0;
+      let entityCount = 0;
+
+      for (const f of files) {
+        if (f.role === "controller" || f.path.toLowerCase().includes("controller")) {
+          controllerCount++;
+        } else if (f.role === "service" || f.path.toLowerCase().includes("service")) {
+          serviceCount++;
+        } else if (f.role === "repository" || f.path.toLowerCase().includes("repository")) {
+          repositoryCount++;
+        } else if (f.role === "entity" || f.path.toLowerCase().includes("model") || f.path.toLowerCase().includes("entity")) {
+          entityCount++;
+        }
+      }
+
+      return [
+        { id: "controller", name: "Controllers", count: controllerCount, color: "#3b82f6" },
+        { id: "service", name: "Services", count: serviceCount, color: "#10b981" },
+        { id: "repository", name: "Repositories", count: repositoryCount, color: "#8b5cf6" },
+        { id: "entity", name: "Entities", count: entityCount, color: "#f59e0b" },
+        { id: "route", name: "Endpoints", count: routes.length, color: "#06b6d4", isRouteCategory: true },
+      ];
+    }
+
+    // Generic fallback taxonomy
+    const counts = new Map<string, number>();
     for (const f of files) {
       const cat = deriveCategory(f.path);
       counts.set(cat, (counts.get(cat) || 0) + 1);
     }
 
-    return Array.from(counts.entries())
-      .map(([name, count]) => ({
-        name,
-        count,
-        color: CATEGORY_COLORS[name] || "#71717a",
-      }))
-      .sort((a, b) => b.count - a.count);
-  }, [files]);
+    const items: CategoryStat[] = Array.from(counts.entries()).map(([name, count]) => ({
+      id: name,
+      name,
+      count,
+      color: "#71717a",
+    }));
+
+    items.push({
+      id: "route",
+      name: "Routes",
+      count: routes.length,
+      color: "#71717a",
+      isRouteCategory: true,
+    });
+
+    return items;
+  }, [isAngular, isSpringBoot, files, routes]);
 
   return (
     <aside className="w-56 shrink-0 border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 flex flex-col h-full select-none">
       <div className="p-3 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
         <div>
           <h2 className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
-            Categories
+            {isAngular ? "Angular Roles" : isSpringBoot ? "Spring Boot Roles" : "Categories"}
           </h2>
-          <p className="text-[10px] text-zinc-400 mt-0.5">
-            {files.length} indexed files
+          <p className="text-[10px] text-zinc-400 mt-0.5 font-mono">
+            {files.length} files · {routes.length} routes
           </p>
         </div>
 
@@ -75,12 +165,19 @@ export function LeftRail({
 
       <div className="flex-1 overflow-y-auto p-2 space-y-1">
         {categories.map((cat) => {
-          const isActive = activeCategory === cat.name;
+          const isRoute = Boolean(cat.isRouteCategory);
+          const isActive = isRoute ? isRouteTableOpen : activeCategory === cat.name;
 
           return (
             <div
-              key={cat.name}
-              onClick={() => onSelectCategory(isActive ? null : cat.name)}
+              key={cat.id}
+              onClick={() => {
+                if (isRoute) {
+                  onOpenRouteTable?.();
+                } else {
+                  onSelectCategory(isActive ? null : cat.name);
+                }
+              }}
               className={`flex items-center justify-between px-2.5 py-1.5 rounded text-xs cursor-pointer transition-colors ${
                 isActive
                   ? "bg-amber-500/15 text-amber-900 dark:text-amber-200 font-semibold ring-1 ring-amber-500"
@@ -93,6 +190,11 @@ export function LeftRail({
                   style={{ backgroundColor: cat.color }}
                 />
                 <span className="truncate text-xs">{cat.name}</span>
+                {isRoute && (
+                  <span className="text-[9px] font-mono text-zinc-400 uppercase tracking-tighter">
+                    [table]
+                  </span>
+                )}
               </div>
               <span
                 className={`font-mono text-[11px] font-medium ml-2 ${

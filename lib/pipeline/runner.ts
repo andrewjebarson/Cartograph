@@ -9,6 +9,8 @@ import {
   storeAnalysisData,
 } from "../db/index";
 import { parseRepository } from "../parser/index";
+import { deduplicateEdges, calculateMetrics } from "../parser/graph";
+import { detectAndAnalyze } from "../adapters/registry";
 import { broker } from "./events";
 
 const execFileAsync = promisify(execFile);
@@ -195,6 +197,37 @@ export async function runAnalysisPipeline(
 
     const parseResult = parseRepository(projectRoot);
 
+    // Read file contents for framework adapter analysis
+    const fileContents: { path: string; content: string }[] = [];
+    for (const f of parseResult.files) {
+      try {
+        const full = path.join(projectRoot, f.path);
+        if (fs.existsSync(full)) {
+          fileContents.push({ path: f.path, content: fs.readFileSync(full, "utf-8") });
+        }
+      } catch {
+        // ignore read error
+      }
+    }
+
+    const adapterResult = detectAndAnalyze(fileContents, parseResult.edges);
+    const finalFramework = adapterResult.framework !== "Generic" ? adapterResult.framework : framework;
+
+    // Merge DI edges into edges if any
+    let finalEdges = parseResult.edges;
+    if (adapterResult.diEdges.length > 0) {
+      finalEdges = deduplicateEdges([...parseResult.edges, ...adapterResult.diEdges]);
+    }
+
+    // Attach roles to files and recalculate metrics
+    for (const f of parseResult.files) {
+      f.role = adapterResult.fileRoles.get(f.path) || "generic";
+    }
+    const finalFiles = calculateMetrics(parseResult.files, finalEdges);
+    parseResult.files = finalFiles;
+    parseResult.edges = finalEdges;
+    parseResult.coverage.internalEdges = finalEdges.length;
+
     // ----------------------------------------------------
     // STAGE 4: STORE
     // ----------------------------------------------------
@@ -211,7 +244,14 @@ export async function runAnalysisPipeline(
       timestamp: new Date().toISOString(),
     });
 
-    storeAnalysisData(analysisId, parseResult, commitSha, framework);
+    storeAnalysisData(
+      analysisId,
+      parseResult,
+      commitSha,
+      finalFramework,
+      adapterResult.routes,
+      adapterResult.fileRoles,
+    );
 
     // Complete!
     broker.publish({

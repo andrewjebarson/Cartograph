@@ -8,6 +8,7 @@ import {
   computeFolderDetails,
 } from "../../lib/graph/details.ts";
 import type { FoldedNodeData } from "../../lib/graph/folding.ts";
+import type { ExtractedRoute } from "../../lib/adapters/types.ts";
 import {
   computeTransitiveWalk,
   computeInsights,
@@ -19,6 +20,7 @@ interface RightPaneProps {
   foldedNodes: FoldedNodeData[];
   edges: { source: string; target: string; count: number }[];
   hoveredId: string | null;
+  routes?: ExtractedRoute[];
   onSelect: (id: string | null) => void;
   onHover: (id: string | null) => void;
 }
@@ -29,6 +31,7 @@ export function RightPane({
   foldedNodes,
   edges,
   hoveredId,
+  routes = [],
   onSelect,
   onHover,
 }: RightPaneProps) {
@@ -51,8 +54,8 @@ export function RightPane({
 
   // Computations
   const repoSummary = useMemo(
-    () => computeRepoSummary(parseResult),
-    [parseResult],
+    () => computeRepoSummary(parseResult, parseResult.rootPath, routes.length),
+    [parseResult, routes.length],
   );
 
   const insights = useMemo(
@@ -454,7 +457,12 @@ export function RightPane({
               <p className="font-mono text-xs font-bold text-zinc-900 dark:text-zinc-100 break-all mt-0.5">
                 {fileDetails.file.path}
               </p>
-              <div className="flex items-center gap-2 mt-1.5">
+              <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                {fileDetails.file.role && (
+                  <span className="text-[10px] font-mono font-bold uppercase px-2 py-0.5 rounded bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30">
+                    {fileDetails.file.role}
+                  </span>
+                )}
                 <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700">
                   {fileDetails.category}
                 </span>
@@ -491,6 +499,40 @@ export function RightPane({
                 </span>
               </div>
             </div>
+
+            {/* Declared Routes / Endpoints in this file */}
+            {routes.filter((r) => r.filePath === fileDetails.file.path).length > 0 && (
+              <div className="pt-2 border-t border-zinc-100 dark:border-zinc-800">
+                <div className="flex items-center justify-between text-[10px] uppercase font-semibold text-zinc-400 tracking-wider mb-1.5">
+                  <span>Declared Endpoints</span>
+                  <span className="font-mono text-amber-600 dark:text-amber-400 font-bold">
+                    {routes.filter((r) => r.filePath === fileDetails.file.path).length}
+                  </span>
+                </div>
+                <div className="space-y-1.5">
+                  {routes
+                    .filter((r) => r.filePath === fileDetails.file.path)
+                    .map((r) => (
+                      <div
+                        key={r.id}
+                        className="p-2 rounded bg-zinc-50 dark:bg-zinc-900/60 border border-zinc-200 dark:border-zinc-800 text-xs font-mono"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                            {r.method}
+                          </span>
+                          <span className="text-[10px] text-zinc-400">
+                            line {r.line}
+                          </span>
+                        </div>
+                        <div className="mt-1 font-semibold text-zinc-800 dark:text-zinc-200 break-all">
+                          {r.path}
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            )}
 
             {/* Phase 6: Blast Radius & Dependency Chain Actions */}
             <div className="pt-2 border-t border-zinc-100 dark:border-zinc-800">

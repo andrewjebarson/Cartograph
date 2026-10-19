@@ -1,6 +1,6 @@
 import React from "react";
 import { notFound } from "next/navigation";
-import { getAnalysis, getAnalysisGraph } from "@/lib/db";
+import { getAnalysis, getAnalysisGraph, getAnalysisRoutes } from "@/lib/db";
 import { ExplorerShell } from "@/components/map/explorer-shell";
 import { ProgressView } from "@/components/pipeline/progress-view";
 
@@ -18,6 +18,7 @@ export default async function AnalysisPage({
 
   if (analysis.status === "complete") {
     const graph = getAnalysisGraph(id);
+    const routes = getAnalysisRoutes(id);
     if (graph) {
       return (
         <ExplorerShell
@@ -27,6 +28,7 @@ export default async function AnalysisPage({
           commitSha={analysis.commit_sha}
           framework={analysis.framework}
           parseResult={graph}
+          routes={routes}
         />
       );
     }

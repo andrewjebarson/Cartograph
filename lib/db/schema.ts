@@ -37,6 +37,7 @@ CREATE TABLE IF NOT EXISTS files (
   byte_size INTEGER DEFAULT 0,
   content_hash TEXT,
   package_or_namespace TEXT,
+  role TEXT,
   fan_in INTEGER DEFAULT 0,
   fan_out INTEGER DEFAULT 0
 );
@@ -55,7 +56,8 @@ CREATE TABLE IF NOT EXISTS routes (
   analysis_id TEXT NOT NULL REFERENCES analyses(id) ON DELETE CASCADE,
   file_id TEXT REFERENCES files(id) ON DELETE CASCADE,
   method TEXT NOT NULL,
-  path TEXT NOT NULL
+  path TEXT NOT NULL,
+  line_number INTEGER DEFAULT 1
 );
 
 CREATE TABLE IF NOT EXISTS file_roles (

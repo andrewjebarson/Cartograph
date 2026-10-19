@@ -1,5 +1,7 @@
 import * as path from "node:path";
+import * as fs from "node:fs";
 import { parseRepository } from "../lib/parser/index.ts";
+import { detectAndAnalyze } from "../lib/adapters/registry.ts";
 
 function run() {
   const args = process.argv.slice(2);
@@ -9,27 +11,56 @@ function run() {
 
   const startTime = Date.now();
   const result = parseRepository(absTarget);
+
+  // Run framework adapter
+  const fileContents: { path: string; content: string }[] = [];
+  for (const f of result.files) {
+    try {
+      const full = path.join(absTarget, f.path);
+      if (fs.existsSync(full)) {
+        fileContents.push({ path: f.path, content: fs.readFileSync(full, "utf-8") });
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  const adapter = detectAndAnalyze(fileContents, result.edges);
   const elapsedMs = Date.now() - startTime;
 
   if (jsonMode) {
-    console.log(JSON.stringify(result, null, 2));
+    console.log(JSON.stringify({ ...result, adapter }, null, 2));
     return;
   }
 
   console.log("==========================================================");
-  console.log("   CARTOGRAPH PARSER: Dual-Engine (TS/Angular + Java)     ");
+  console.log(`   CARTOGRAPH: ${adapter.framework.toUpperCase()} ADAPTER & PARSER`);
   console.log("==========================================================");
   console.log(`Target:      ${result.rootPath}`);
+  console.log(`Framework:   ${adapter.framework}`);
   console.log(`Duration:    ${elapsedMs}ms`);
   console.log(`Total Files: ${result.coverage.totalFiles}`);
   console.log(`Total Lines: ${result.coverage.totalLines.toLocaleString()}`);
   console.log(`Bytes:       ${result.coverage.totalBytes.toLocaleString()} bytes`);
   console.log("----------------------------------------------------------");
   console.log(`Internal Edges:      ${result.coverage.internalEdges}`);
+  console.log(`DI Edges Added:      ${adapter.diEdges.length}`);
   console.log(`External Imports:    ${result.coverage.externalImports}`);
   console.log(`Unresolved Imports:  ${result.coverage.unresolvedImports}`);
   console.log(`Resolution Rate:     ${result.coverage.resolutionRate}%`);
   console.log("----------------------------------------------------------");
+
+  console.log("\n[Dynamic Rail Taxonomy]");
+  for (const item of adapter.taxonomy) {
+    console.log(`  • ${item.name.padEnd(20)}: ${item.count}`);
+  }
+
+  if (adapter.routes.length > 0) {
+    console.log(`\n[Extracted Route Table (${adapter.routes.length} endpoints)]`);
+    for (const r of adapter.routes) {
+      console.log(`  • [${r.method.padEnd(6)}] ${r.path.padEnd(30)} -> ${r.filePath}:${r.line}`);
+    }
+  }
 
   // Sample files with metrics
   console.log("\n[Top Files by Connectivity (Fan-In + Fan-Out)]");
