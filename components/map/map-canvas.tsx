@@ -28,10 +28,18 @@ const nodeTypes: NodeTypes = {
 interface MapCanvasProps {
   parseResult: ParseResult;
   selectedId: string | null;
+  hoveredId?: string | null;
   onSelect: (id: string | null) => void;
+  onHover: (id: string | null) => void;
 }
 
-function InnerMapCanvas({ parseResult, selectedId, onSelect }: MapCanvasProps) {
+function InnerMapCanvas({
+  parseResult,
+  selectedId,
+  hoveredId = null,
+  onSelect,
+  onHover,
+}: MapCanvasProps) {
   const [expandedNodeIds, setExpandedNodeIds] = useState<Set<string>>(new Set());
   const { fitView, getZoom } = useReactFlow();
   const prevExpandedCount = useRef(0);
@@ -128,6 +136,9 @@ function InnerMapCanvas({ parseResult, selectedId, onSelect }: MapCanvasProps) {
     return positionedNodes.map((n) => {
       const isDimmed = hasSelection && !activeNodeIds.has(n.id);
       const isSelected = selectedId === n.id;
+      const isNodeHovered =
+        Boolean(hoveredId) &&
+        (hoveredId === n.id || fileToNodeMap.get(hoveredId || "") === n.id);
 
       if (n.isExpanded) {
         return {
@@ -144,9 +155,11 @@ function InnerMapCanvas({ parseResult, selectedId, onSelect }: MapCanvasProps) {
             fanOut: n.fanOut,
             isDimmed,
             selectedFile: selectedId,
+            hoveredFile: hoveredId,
             onToggleExpand: handleToggleExpand,
             onSelectFile: (filePath: string) => onSelect(filePath),
             onSelectFolder: (id: string) => onSelect(id),
+            onHoverFile: onHover,
           },
         };
       }
@@ -166,12 +179,23 @@ function InnerMapCanvas({ parseResult, selectedId, onSelect }: MapCanvasProps) {
           category: n.category,
           isDimmed,
           isSelected,
+          isHovered: isNodeHovered,
           onToggleExpand: handleToggleExpand,
           onSelect: (id: string) => onSelect(id),
+          onHover,
         },
       };
     });
-  }, [positionedNodes, selectedId, activeNodeIds, handleToggleExpand, onSelect]);
+  }, [
+    positionedNodes,
+    selectedId,
+    activeNodeIds,
+    hoveredId,
+    fileToNodeMap,
+    handleToggleExpand,
+    onSelect,
+    onHover,
+  ]);
 
   // Convert to React Flow Edges
   const edges: Edge[] = useMemo(() => {
@@ -181,7 +205,14 @@ function InnerMapCanvas({ parseResult, selectedId, onSelect }: MapCanvasProps) {
       const isSrcExpanded = expandedNodeIds.has(e.source);
       const isTgtExpanded = expandedNodeIds.has(e.target);
       const isEdgeActive = activeEdgeIds.has(e.id);
-      const isDimmed = hasSelection && !isEdgeActive;
+      const isEdgeHovered =
+        Boolean(hoveredId) &&
+        (e.source === hoveredId ||
+          e.target === hoveredId ||
+          e.sourceFile === hoveredId ||
+          e.targetFile === hoveredId);
+
+      const isDimmed = hasSelection && !isEdgeActive && !isEdgeHovered;
 
       return {
         id: e.id,
@@ -189,23 +220,28 @@ function InnerMapCanvas({ parseResult, selectedId, onSelect }: MapCanvasProps) {
         target: e.target,
         sourceHandle: isSrcExpanded ? e.sourceFile : undefined,
         targetHandle: isTgtExpanded ? e.targetFile : undefined,
-        animated: isEdgeActive,
+        animated: isEdgeActive || isEdgeHovered,
         style: {
-          stroke: isEdgeActive
+          stroke: isEdgeHovered
             ? "#f59e0b"
-            : "#a1a1aa",
-          strokeWidth: isEdgeActive ? 2 : 1,
-          opacity: isDimmed ? 0.15 : 0.8,
+            : isEdgeActive
+              ? "#f59e0b"
+              : "#a1a1aa",
+          strokeWidth: isEdgeHovered ? 2.5 : isEdgeActive ? 2 : 1,
+          opacity: isDimmed ? 0.15 : 0.85,
           transition: "opacity 150ms ease, stroke 150ms ease",
         },
       };
     });
-  }, [positionedEdges, expandedNodeIds, selectedId, activeEdgeIds]);
+  }, [positionedEdges, expandedNodeIds, selectedId, activeEdgeIds, hoveredId]);
 
   return (
     <div
       className="relative w-full h-full bg-zinc-50 dark:bg-zinc-950 overflow-hidden"
-      onClick={() => onSelect(null)}
+      onClick={() => {
+        onSelect(null);
+        onHover(null);
+      }}
     >
       <ReactFlow
         nodes={nodes}
@@ -218,7 +254,12 @@ function InnerMapCanvas({ parseResult, selectedId, onSelect }: MapCanvasProps) {
         nodesDraggable={true}
         nodesConnectable={false}
         elementsSelectable={true}
-        onPaneClick={() => onSelect(null)}
+        onPaneClick={() => {
+          onSelect(null);
+          onHover(null);
+        }}
+        onNodeMouseEnter={(_, node) => onHover(node.id)}
+        onNodeMouseLeave={() => onHover(null)}
       >
         <Background gap={18} size={1} className="!opacity-40" />
         <Controls

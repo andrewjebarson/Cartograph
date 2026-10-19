@@ -1,14 +1,21 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import Link from "next/link";
 import { SAMPLE_GRAPH_DATA } from "../../../lib/sample-graph-data.ts";
+import { computeFoldedGraph } from "../../../lib/graph/folding.ts";
 import { LeftRail } from "../../../components/map/left-rail.tsx";
 import { RightPane } from "../../../components/map/right-pane.tsx";
 import { MapCanvas } from "../../../components/map/map-canvas.tsx";
 
 export default function PreviewMapPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
+
+  const foldedGraph = useMemo(
+    () => computeFoldedGraph(SAMPLE_GRAPH_DATA.files, SAMPLE_GRAPH_DATA.edges),
+    [],
+  );
 
   return (
     <div className="flex flex-col h-full w-full overflow-hidden bg-white dark:bg-zinc-950">
@@ -53,14 +60,21 @@ export default function PreviewMapPage() {
           <MapCanvas
             parseResult={SAMPLE_GRAPH_DATA}
             selectedId={selectedId}
+            hoveredId={hoveredId}
             onSelect={setSelectedId}
+            onHover={setHoveredId}
           />
         </main>
 
         {/* Right Pane: Details */}
         <RightPane
           selectedId={selectedId}
-          files={SAMPLE_GRAPH_DATA.files}
+          parseResult={SAMPLE_GRAPH_DATA}
+          foldedNodes={foldedGraph.nodes}
+          edges={foldedGraph.edges}
+          hoveredId={hoveredId}
+          onSelect={setSelectedId}
+          onHover={setHoveredId}
         />
       </div>
     </div>

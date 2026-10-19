@@ -14,9 +14,11 @@ export interface ExpandedPanelData extends Record<string, unknown> {
   fanOut: number;
   isDimmed?: boolean;
   selectedFile?: string | null;
+  hoveredFile?: string | null;
   onToggleExpand: (id: string) => void;
   onSelectFile: (filePath: string) => void;
   onSelectFolder: (id: string) => void;
+  onHoverFile?: (filePath: string | null) => void;
 }
 
 export type ExpandedCustomNode = Node<ExpandedPanelData, "expandedPanel">;
@@ -111,6 +113,7 @@ export const ExpandedPanelNode = memo(function ExpandedPanelNode({
         {visibleFiles.map((file) => {
           const fileName = file.path.split("/").pop() || file.path;
           const isFileSelected = panelData.selectedFile === file.path;
+          const isFileHovered = panelData.hoveredFile === file.path;
 
           return (
             <div
@@ -119,10 +122,14 @@ export const ExpandedPanelNode = memo(function ExpandedPanelNode({
                 e.stopPropagation();
                 panelData.onSelectFile(file.path);
               }}
+              onMouseEnter={() => panelData.onHoverFile?.(file.path)}
+              onMouseLeave={() => panelData.onHoverFile?.(null)}
               className={`relative flex items-center justify-between px-3 py-1.5 text-xs font-mono cursor-pointer transition-colors ${
                 isFileSelected
-                  ? "bg-amber-500/20 text-amber-900 dark:text-amber-200 font-medium"
-                  : "hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300"
+                  ? "bg-amber-500/20 text-amber-900 dark:text-amber-200 font-medium ring-1 ring-amber-500"
+                  : isFileHovered
+                    ? "bg-amber-500/10 text-amber-800 dark:text-amber-300 ring-1 ring-amber-400"
+                    : "hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300"
               }`}
             >
               {/* Row Target Handle */}

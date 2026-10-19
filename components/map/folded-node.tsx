@@ -13,8 +13,10 @@ export interface FoldedNodeData extends Record<string, unknown> {
   category: string;
   isDimmed?: boolean;
   isSelected?: boolean;
+  isHovered?: boolean;
   onToggleExpand: (id: string) => void;
   onSelect: (id: string) => void;
+  onHover?: (id: string | null) => void;
 }
 
 export type FoldedCustomNode = Node<FoldedNodeData, "foldedNode">;
@@ -26,6 +28,7 @@ export const FoldedNode = memo(function FoldedNode({
   const nodeData = data;
   const isDimmed = Boolean(nodeData.isDimmed);
   const isSelected = Boolean(nodeData.isSelected);
+  const isHovered = Boolean(nodeData.isHovered);
 
   return (
     <div
@@ -37,10 +40,12 @@ export const FoldedNode = memo(function FoldedNode({
         e.stopPropagation();
         nodeData.onToggleExpand(id);
       }}
+      onMouseEnter={() => nodeData.onHover?.(id)}
+      onMouseLeave={() => nodeData.onHover?.(null)}
       className={`group relative rounded-md border text-xs shadow-sm transition-all duration-150 cursor-pointer select-none ${
         isDimmed ? "opacity-25" : "opacity-100"
       } ${
-        isSelected
+        isSelected || isHovered
           ? "border-amber-500 bg-amber-500/10 ring-1 ring-amber-500"
           : "border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 hover:border-zinc-400 dark:hover:border-zinc-500"
       }`}
