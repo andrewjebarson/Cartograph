@@ -1,10 +1,14 @@
-import { listAnalyses } from "@/lib/db";
+import { listAnalyses, getLatestPromptExperiment, getEvalSummary } from "@/lib/db";
 import { seedSampleData, clearAllData } from "./actions";
 import { NewRepoForm } from "@/components/dashboard/new-repo-form";
 import { AnalysesTable } from "@/components/dashboard/analyses-table";
+import { EvalsSection } from "@/components/dashboard/evals-section";
 
 export default async function DashboardPage() {
   const analyses = listAnalyses();
+  const latestExperiment = getLatestPromptExperiment();
+  const evalSummary = getEvalSummary();
+
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-8">
@@ -71,7 +75,11 @@ export default async function DashboardPage() {
           <AnalysesTable initialAnalyses={analyses} />
         </div>
       )}
+
+      {/* Phase 11: Prompt Versions & Answer Quality Evals */}
+      <EvalsSection initialExperiment={latestExperiment} evalSummary={evalSummary} />
     </div>
   );
 }
+
 

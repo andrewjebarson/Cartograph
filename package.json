@@ -7,7 +7,11 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "parse": "node --no-warnings scripts/parse.ts"
+    "parse": "node --no-warnings scripts/parse.ts",
+    "eval:paths": "node --no-warnings scripts/eval-paths.ts",
+    "eval:roles": "node --no-warnings scripts/eval-roles.ts",
+    "eval:prompts": "node --no-warnings scripts/eval-prompts.ts",
+    "evals": "node --no-warnings scripts/evals.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.117.2",

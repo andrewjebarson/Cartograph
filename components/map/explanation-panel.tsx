@@ -9,6 +9,13 @@ export interface ExplanationTrace {
   durationMs: number;
 }
 
+export interface ExplanationEval {
+  pathAccuracy: number;
+  passed: boolean;
+  inventedPaths: string[];
+  totalPaths: number;
+}
+
 export interface ExplanationData {
   text?: string;
   explanation?: string;
@@ -20,7 +27,9 @@ export interface ExplanationData {
   contentHash: string;
   durationMs: number;
   trace: ExplanationTrace;
+  eval?: ExplanationEval;
 }
+
 
 
 interface ExplanationPanelProps {
@@ -361,7 +370,26 @@ export function ExplanationPanel({
               <span className="text-zinc-500 truncate max-w-[110px]" title={currentExplanation.model}>
                 · {currentExplanation.model}
               </span>
+              {currentExplanation.eval && (
+                <span
+                  className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono border ${
+                    currentExplanation.eval.passed
+                      ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
+                      : "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20"
+                  }`}
+                  title={
+                    currentExplanation.eval.passed
+                      ? `100% path accuracy: all ${currentExplanation.eval.totalPaths} paths verified against AST`
+                      : `Invented paths: ${currentExplanation.eval.inventedPaths.join(", ")}`
+                  }
+                >
+                  {currentExplanation.eval.passed
+                    ? "✓ 0 invented"
+                    : `⚠ ${currentExplanation.eval.inventedPaths.length} invented`}
+                </span>
+              )}
             </div>
+
 
             <button
               onClick={handleCopy}

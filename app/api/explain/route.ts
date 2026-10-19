@@ -10,6 +10,7 @@ import {
   getCachedExplanation,
   saveExplanation,
   recordAiTrace,
+  recordEvalResult,
 } from "../../../lib/db/index.ts";
 import { getAiConfig, generateAiCompletion } from "../../../lib/ai/client.ts";
 import {
@@ -17,6 +18,8 @@ import {
   buildFileExplainPrompt,
   buildFolderExplainPrompt,
 } from "../../../lib/ai/prompts.ts";
+import { checkInventedPaths } from "../../../lib/evals/path-evaluator.ts";
+
 
 export async function POST(request: Request) {
   try {
@@ -74,17 +77,33 @@ export async function POST(request: Request) {
         : fileRecord?.content_hash ||
           crypto.createHash("sha256").update(targetPath, "utf8").digest("hex");
 
+      // Retrieve exact neighbors
+      const { imports, importedBy } = getFileNeighbors(analysisId, targetPath);
+      const allowedPaths = [targetPath, ...imports, ...importedBy];
+
       // 1. Cache read inside the traced function
       if (!forceRefresh) {
         const cached = getCachedExplanation(contentHash, aiConfig.model);
         if (cached) {
           const durationMs = Date.now() - startTime;
+          const pathEval = checkInventedPaths(cached.explanation, allowedPaths);
+
           recordAiTrace({
             analysisId,
             targetPath,
             contentHash,
             model: cached.model,
             cacheHit: true,
+            durationMs,
+          });
+
+          recordEvalResult({
+            targetPath,
+            evalType: "invented_path",
+            score: pathEval.score,
+            passed: pathEval.passed,
+            totalPaths: pathEval.totalPaths,
+            inventedPaths: pathEval.inventedPaths,
             durationMs,
           });
 
@@ -103,13 +122,17 @@ export async function POST(request: Request) {
               modelCalls: 0,
               durationMs,
             },
+            eval: {
+              pathAccuracy: pathEval.score,
+              passed: pathEval.passed,
+              inventedPaths: pathEval.inventedPaths,
+              totalPaths: pathEval.totalPaths,
+            },
           });
         }
       }
 
       // 2. Cache miss: retrieve exact neighbors and call model
-      const { imports, importedBy } = getFileNeighbors(analysisId, targetPath);
-
       const prompt = buildFileExplainPrompt({
         path: targetPath,
         content: content || `// File: ${targetPath}\n// Role: ${fileRecord?.role || "generic"}`,
@@ -121,6 +144,7 @@ export async function POST(request: Request) {
 
       const completion = await generateAiCompletion(prompt, SYSTEM_PROMPT);
       const durationMs = Date.now() - startTime;
+      const pathEval = checkInventedPaths(completion.text, allowedPaths);
 
       // Persist in local SQLite cache
       saveExplanation({
@@ -141,6 +165,16 @@ export async function POST(request: Request) {
         durationMs,
       });
 
+      recordEvalResult({
+        targetPath,
+        evalType: "invented_path",
+        score: pathEval.score,
+        passed: pathEval.passed,
+        totalPaths: pathEval.totalPaths,
+        inventedPaths: pathEval.inventedPaths,
+        durationMs,
+      });
+
       return NextResponse.json({
         explanation: completion.text,
         text: completion.text,
@@ -156,6 +190,12 @@ export async function POST(request: Request) {
           modelCalls: 1,
           durationMs,
         },
+        eval: {
+          pathAccuracy: pathEval.score,
+          passed: pathEval.passed,
+          inventedPaths: pathEval.inventedPaths,
+          totalPaths: pathEval.totalPaths,
+        },
       });
     }
 
@@ -163,6 +203,12 @@ export async function POST(request: Request) {
     // FOLDER EXPLANATION
     // -------------------------------------------------------------------------
     const folderDetails = getFolderDetails(analysisId, targetPath);
+    const folderAllowedPaths = [
+      targetPath,
+      ...folderDetails.files.map((f) => f.path),
+      ...folderDetails.incomingFiles,
+      ...folderDetails.outgoingFiles,
+    ];
 
     // Deterministic folder hash derived from its files and their hashes
     const folderHashPayload =
@@ -179,12 +225,24 @@ export async function POST(request: Request) {
       const cached = getCachedExplanation(folderHash, aiConfig.model);
       if (cached) {
         const durationMs = Date.now() - startTime;
+        const pathEval = checkInventedPaths(cached.explanation, folderAllowedPaths);
+
         recordAiTrace({
           analysisId,
           targetPath,
           contentHash: folderHash,
           model: cached.model,
           cacheHit: true,
+          durationMs,
+        });
+
+        recordEvalResult({
+          targetPath,
+          evalType: "invented_path",
+          score: pathEval.score,
+          passed: pathEval.passed,
+          totalPaths: pathEval.totalPaths,
+          inventedPaths: pathEval.inventedPaths,
           durationMs,
         });
 
@@ -203,6 +261,12 @@ export async function POST(request: Request) {
             modelCalls: 0,
             durationMs,
           },
+          eval: {
+            pathAccuracy: pathEval.score,
+            passed: pathEval.passed,
+            inventedPaths: pathEval.inventedPaths,
+            totalPaths: pathEval.totalPaths,
+          },
         });
       }
     }
@@ -220,6 +284,7 @@ export async function POST(request: Request) {
 
     const completion = await generateAiCompletion(prompt, SYSTEM_PROMPT);
     const durationMs = Date.now() - startTime;
+    const pathEval = checkInventedPaths(completion.text, folderAllowedPaths);
 
     saveExplanation({
       fileId: null,
@@ -235,6 +300,16 @@ export async function POST(request: Request) {
       contentHash: folderHash,
       model: completion.model,
       cacheHit: false,
+      durationMs,
+    });
+
+    recordEvalResult({
+      targetPath,
+      evalType: "invented_path",
+      score: pathEval.score,
+      passed: pathEval.passed,
+      totalPaths: pathEval.totalPaths,
+      inventedPaths: pathEval.inventedPaths,
       durationMs,
     });
 
@@ -254,7 +329,14 @@ export async function POST(request: Request) {
         modelCalls: 1,
         durationMs,
       },
+      eval: {
+        pathAccuracy: pathEval.score,
+        passed: pathEval.passed,
+        inventedPaths: pathEval.inventedPaths,
+        totalPaths: pathEval.totalPaths,
+      },
     });
+
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : String(err);
     return NextResponse.json({ error: errorMsg }, { status: 500 });

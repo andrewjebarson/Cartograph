@@ -141,9 +141,38 @@ function migrateSchema(db: DatabaseSync) {
         duration_ms INTEGER NOT NULL,
         created_at TEXT NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS eval_records (
+        id TEXT PRIMARY KEY,
+        target_path TEXT NOT NULL,
+        eval_type TEXT NOT NULL,
+        score REAL NOT NULL,
+        passed INTEGER NOT NULL,
+        total_paths INTEGER DEFAULT 0,
+        invented_paths_json TEXT,
+        duration_ms INTEGER DEFAULT 0,
+        created_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS prompt_experiments (
+        id TEXT PRIMARY KEY,
+        prompt_v1_name TEXT NOT NULL,
+        prompt_v2_name TEXT NOT NULL,
+        dataset_size INTEGER NOT NULL,
+        v1_path_accuracy REAL NOT NULL,
+        v2_path_accuracy REAL NOT NULL,
+        v1_specificity REAL NOT NULL,
+        v2_specificity REAL NOT NULL,
+        path_accuracy_delta REAL NOT NULL,
+        specificity_delta REAL NOT NULL,
+        winner TEXT NOT NULL,
+        summary TEXT NOT NULL,
+        details_json TEXT,
+        created_at TEXT NOT NULL
+      );
       CREATE INDEX IF NOT EXISTS idx_explanations_hash_model ON explanations(content_hash, model);
       CREATE INDEX IF NOT EXISTS idx_ai_traces_hash ON ai_traces(content_hash);
+      CREATE INDEX IF NOT EXISTS idx_eval_records_type ON eval_records(eval_type);
     `);
+
   } catch (err) {
     console.error("Schema migration warning:", err);
   }
@@ -761,4 +790,185 @@ export function getFolderDetails(analysisId: string, folderPath: string) {
     incomingFiles: Array.from(incomingFiles),
     outgoingFiles: Array.from(outgoingFiles),
   };
+}
+
+// -----------------------------------------------------------------------------
+// EVALS & EXPERIMENTS HELPERS (Phase 11)
+// -----------------------------------------------------------------------------
+
+export interface EvalRecord {
+  id: string;
+  target_path: string;
+  eval_type: string;
+  score: number;
+  passed: number;
+  total_paths: number;
+  invented_paths_json: string | null;
+  duration_ms: number;
+  created_at: string;
+}
+
+export interface PromptExperimentRecord {
+  id: string;
+  prompt_v1_name: string;
+  prompt_v2_name: string;
+  dataset_size: number;
+  v1_path_accuracy: number;
+  v2_path_accuracy: number;
+  v1_specificity: number;
+  v2_specificity: number;
+  path_accuracy_delta: number;
+  specificity_delta: number;
+  winner: string;
+  summary: string;
+  details_json: string | null;
+  created_at: string;
+}
+
+export function recordEvalResult(params: {
+  targetPath: string;
+  evalType: "invented_path" | "role_accuracy" | "prompt_comparison";
+  score: number;
+  passed: boolean;
+  totalPaths?: number;
+  inventedPaths?: string[];
+  durationMs?: number;
+}): void {
+  const db = getDb();
+  const id = `evl_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+  const now = new Date().toISOString();
+  db.prepare(`
+    INSERT INTO eval_records (id, target_path, eval_type, score, passed, total_paths, invented_paths_json, duration_ms, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    id,
+    params.targetPath,
+    params.evalType,
+    params.score,
+    params.passed ? 1 : 0,
+    params.totalPaths ?? 0,
+    params.inventedPaths ? JSON.stringify(params.inventedPaths) : null,
+    params.durationMs ?? 0,
+    now,
+  );
+}
+
+export function getRecentEvalResults(limit = 20): EvalRecord[] {
+  const db = getDb();
+  const rows = db.prepare(`
+    SELECT id, target_path, eval_type, score, passed, total_paths, invented_paths_json, duration_ms, created_at
+    FROM eval_records
+    ORDER BY created_at DESC
+    LIMIT ?
+  `).all(limit);
+  return toPlain(rows) as EvalRecord[];
+}
+
+export function getEvalSummary(): {
+  totalEvaluated: number;
+  avgPathScore: number;
+  passRate: number;
+} {
+  const db = getDb();
+  const row = db.prepare(`
+    SELECT 
+      COUNT(*) as total,
+      AVG(score) as avg_score,
+      SUM(CASE WHEN passed = 1 THEN 1 ELSE 0 END) as passed_count
+    FROM eval_records
+    WHERE eval_type = 'invented_path'
+  `).get() as { total: number; avg_score: number | null; passed_count: number | null };
+
+  const total = row?.total || 0;
+  const avgPathScore = row?.avg_score != null ? Math.round(row.avg_score * 100) / 100 : 1.0;
+  const passRate = total > 0 ? Math.round(((row?.passed_count || 0) / total) * 100) : 100;
+
+  return { totalEvaluated: total, avgPathScore, passRate };
+}
+
+export function recordPromptExperiment(exp: Omit<PromptExperimentRecord, "id" | "created_at">): PromptExperimentRecord {
+  const db = getDb();
+  const id = `exp_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+  const now = new Date().toISOString();
+  db.prepare(`
+    INSERT INTO prompt_experiments (
+      id, prompt_v1_name, prompt_v2_name, dataset_size,
+      v1_path_accuracy, v2_path_accuracy, v1_specificity, v2_specificity,
+      path_accuracy_delta, specificity_delta, winner, summary, details_json, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    id,
+    exp.prompt_v1_name,
+    exp.prompt_v2_name,
+    exp.dataset_size,
+    exp.v1_path_accuracy,
+    exp.v2_path_accuracy,
+    exp.v1_specificity,
+    exp.v2_specificity,
+    exp.path_accuracy_delta,
+    exp.specificity_delta,
+    exp.winner,
+    exp.summary,
+    exp.details_json,
+    now,
+  );
+
+  return {
+    id,
+    ...exp,
+    created_at: now,
+  };
+}
+
+export function getLatestPromptExperiment(): PromptExperimentRecord | null {
+  const db = getDb();
+  const row = db.prepare(`
+    SELECT * FROM prompt_experiments
+    ORDER BY created_at DESC
+    LIMIT 1
+  `).get();
+  return (toPlain(row) as PromptExperimentRecord) || null;
+}
+
+export function listRecentExplanationsWithNeighbors(limit = 10): {
+  id: string;
+  targetPath: string;
+  explanation: string;
+  model: string;
+  allowedPaths: string[];
+}[] {
+  const db = getDb();
+  const rows = db.prepare(`
+    SELECT id, target_path, explanation, model
+    FROM explanations
+    ORDER BY created_at DESC
+    LIMIT ?
+  `).all(limit) as { id: string; target_path: string; explanation: string; model: string }[];
+
+  return rows.map((r) => {
+    // Collect allowed paths for this file
+    const outgoing = db.prepare(`
+      SELECT to_path FROM edges WHERE from_path = ?
+    `).all(r.target_path) as { to_path: string }[];
+
+    const incoming = db.prepare(`
+      SELECT from_path FROM edges WHERE to_path = ?
+    `).all(r.target_path) as { from_path: string }[];
+
+    const allowed = Array.from(
+      new Set([
+        r.target_path,
+        ...outgoing.map((o) => o.to_path),
+        ...incoming.map((i) => i.from_path),
+      ]),
+    );
+
+    return {
+      id: r.id,
+      targetPath: r.target_path,
+      explanation: r.explanation,
+      model: r.model,
+      allowedPaths: allowed,
+    };
+  });
 }
